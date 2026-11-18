@@ -1,0 +1,122 @@
+# SecureBank Labs — application configuration
+#
+# WARNING: this application is INTENTIONALLY VULNERABLE. It exists to be
+# exploited and then fixed. Do not deploy it anywhere reachable.
+
+spring:
+  application:
+    name: securebank-labs
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/securebank
+    username: securebank
+    password: securebank
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      # schema.sql owns the schema; Hibernate only validates it. This fails
+      # fast and loudly if the two ever disagree.
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+
+  sql:
+    init:
+      # schema.sql + data.sql run on every boot, idempotently. This is what
+      # makes the seed self-healing after you wreck the database mid-lab.
+      mode: always
+      encoding: UTF-8
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 20MB
+
+server:
+  port: 8080
+  error:
+    # LAB 4 (A02) + LAB 23 (A10): verbose errors.
+    # These are deliberately weakened. Lab 23's fix is to set them to `never`
+    # and add input validation; Lab 4's fix additionally stops the exception
+    # message from embedding the JWT secret and the JDBC URL.
+    include-stacktrace: always
+    include-message: always
+    include-exception: always
+    include-binding-errors: always
+    include-path: always
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    env:
+      show-values: always
+  server:
+    base-path: /actuator
+
+# ---------------------------------------------------------------------------
+# Lab toggles
+# ---------------------------------------------------------------------------
+# THE RULE: a toggle ARMS a lab. It is NOT the fix.
+#
+#   lab.<slug>.enabled = true   ->  the vulnerability is live and exploitable
+#   lab.<slug>.enabled = false  ->  the lab is disarmed (not "fixed")
+#
+# To FIX a lab, edit the vulnerable code at the location named in the
+# lab's "Affected code" panel. The toggle stays `true`.
+#
+# The verification harness asserts on BEHAVIOUR, never on these flags:
+#   make verify        -> every exploit must SUCCEED (shipped vulnerable build)
+#   make verify-fixed  -> every exploit must FAIL    (after you fixed them)
+# ---------------------------------------------------------------------------
+lab:
+  # A01 — Broken Access Control
+  idor:               true   # Lab 1  — view another customer's account
+  privesc:            true   # Lab 2  — customer -> admin
+  ssrf:               true   # Lab 3  — fetch internal metadata URL
+
+  # A02 — Security Misconfiguration
+  debugtrace:         true   # Lab 4  — stack trace exposes DB creds
+  admincreds:         true   # Lab 5  — default admin/admin
+  filedisclosure:     true   # Lab 6  — .env / .git/config / backup.zip
+
+  # A04 — Cryptographic Failures
+  md5hash:            true   # Lab 7  — unsalted MD5 password hashes
+  jwtsecret:          true   # Lab 8  — hardcoded JWT secret
+  pii:                true   # Lab 9  — PII in cleartext responses + logs
+
+  # A05 — Injection
+  sqli:               true   # Lab 10 — SQL injection / login bypass
+  ssti:               true   # Lab 11 — SpEL injection (template)
+  cmdinject:          true   # Lab 12 — OS command injection (report svc)
+  xss:                true   # Lab 13 — stored XSS in transaction notes
+
+  # A06 — Insecure Design
+  negativetransfer:   true   # Lab 14 — negative transfer creates money
+  massassign:         true   # Lab 15 — self-promote to admin
+  userenum:           true   # Lab 16 — account enumeration via errors
+
+  # A07 — Authentication Failures
+  bruteforce:         true   # Lab 17 — no rate limiting / lockout
+  sessionfixation:    true   # Lab 18 — session id not rotated on login
+  resettoken:         true   # Lab 19 — predictable password reset token
+
+  # A08 — Software & Data Integrity Failures
+  deserialization:    true   # Lab 20 — Java deserialization RCE
+  jwtalgnone:         true   # Lab 21 — JWT alg:none bypass
+  upload:             true   # Lab 22 — unverified file upload
+
+  # A10 — Mishandling of Exceptional Conditions
+  verboseerror:       true   # Lab 23 — verbose error / stack trace
+  typecoercion:       true   # Lab 24 — type coercion leaks ORM internals
+  failopen:           true   # Lab 25 — auth bypass via exception fallback
+
+logging:
+  level:
+    com.securebank: INFO
+    org.springframework.jdbc.core: WARN
