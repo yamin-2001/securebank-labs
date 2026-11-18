@@ -14,7 +14,7 @@ from common import Client, Result, Verdict
 ID = 13
 TITLE = "Stored XSS — a transaction note is rendered as raw HTML"
 ENDPOINT = "POST /api/transfers/send, GET /api/transfers/html"
-AFFECTED = "labs/a05/NoteRenderer.java -> render(String)"
+AFFECTED = "backend/src/main/java/com/securebank/labs/a05/NoteRenderer.java -> render(String)"
 
 PAYLOAD = '<img src=x onerror=alert(document.cookie)>'
 

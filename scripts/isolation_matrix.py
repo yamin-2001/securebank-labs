@@ -21,7 +21,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 VERIFY = ROOT / "verify"
-JAVA = ROOT / "src/main/java/com/securebank"
+# The Maven project lives in backend/, alongside the React app in frontend/.
+BACKEND = ROOT / "backend"
+JAVA = BACKEND / "src/main/java/com/securebank"
 
 # Each entry: lab id -> (file, old snippet, new snippet).
 # The "fixed" snippet replaces the vulnerable branch with the fixed one.
@@ -128,10 +130,16 @@ FIXES[12] = [FIXES[12], (
 # --- Lab 6: take the sensitive files off the web root -------------------
 # The fix is to delete the files, so this lab's "edit" is a file operation
 # rather than a code edit. The three files are moved aside and put back.
+#
+# The .git/config fixture lives in a directory named `git-config-fixture`,
+# not `.git` — git refuses to track the contents of a nested .git directory,
+# so the source tree uses a name the build renames on the way in. See the
+# <resource> block in backend/pom.xml.
+LAB6_STATIC = BACKEND / "src/main/resources/static"
 LAB6_FILES = [
-    ROOT / "src/main/resources/static/.env",
-    ROOT / "src/main/resources/static/.git/config",
-    ROOT / "src/main/resources/static/backup.zip",
+    LAB6_STATIC / ".env",
+    LAB6_STATIC / "git-config-fixture",
+    LAB6_STATIC / "backup.zip",
 ]
 LAB6_BACKUP = ROOT / ".isolation-lab6-backup"
 
@@ -159,7 +167,7 @@ LAST_HARNESS_OUTPUT: list[str] = []
 # puts the canonical block back.
 # ---------------------------------------------------------------------------
 
-SEED = ROOT / "src/main/resources/data.sql"
+SEED = BACKEND / "src/main/resources/data.sql"
 
 # The seeded users, in the order data.sql lists them. The passwords are the
 # shipped ones; Lab 5 rotates the admin's.
@@ -178,17 +186,32 @@ LAB5_ADMIN_PASSWORD = "S3cure-Admin-Passw0rd!"
 
 def _seed_row(user_id, username, password_hash, email, full_name, role) -> str:
     # The column padding matches data.sql, so a revert rewrites the file
-    # byte for byte instead of leaving it reformatted.
+    # byte for byte instead of leaving it reformatted. The pad widths are
+    # derived from the longest value in each column, so they stay right when
+    # a lab swaps in a longer hash (PBKDF2 rows are much longer than MD5).
+    #
+    # The padding sits *outside* the quotes — a padded string literal would
+    # change the value ('bob  ' is not 'bob'), and while Postgres would
+    # store it verbatim, the seed's own integrity check compares the
+    # literal against md5(password), so it must stay clean.
+    user_pad = max(len(u[1]) for u in SEED_USERS)
+    email_pad = max(len(u[3]) for u in SEED_USERS)
+    name_pad = max(len(u[4]) for u in SEED_USERS)
+    pad_user = " " * (user_pad - len(username))
+    pad_email = " " * (email_pad - len(email))
+    pad_name = " " * (name_pad - len(full_name))
     return (
-        f"    ({user_id}, '{username}', '{password_hash}', "
-        f"'{email}',   '{full_name}',    '{role}')"
+        f"    ({user_id}, '{username}',{pad_user} '{password_hash}', "
+        f"'{email}',{pad_email} '{full_name}',{pad_name} '{role}')"
     )
 
 
 def _seed_block(rows: list[str]) -> str:
     """The rows as they appear inside the INSERT's VALUES list."""
     # Comma separated: without the commas Postgres reads it as one
-    # malformed statement ("syntax error at or near '('").
+    # malformed statement ("syntax error at or near '('"). No trailing comma
+    # after the last row — Postgres rejects that ("syntax error at or near
+    # ON").
     return ",\n".join(rows)
 
 
@@ -293,40 +316,54 @@ _fix(
 )
 
 # --- Lab 17: enforce the attempt budget ---------------------------------
-# The fix is two edits: the service refuses once the budget is gone, and a
-# successful login clears the counter. Both are part of the same lab.
-_fix(
-    17,
-    JAVA / "labs/a07/LoginAttemptService.java",
-    """        // LAB 17 (VULNERABLE): nothing is counted and nothing is refused.
+# The fix is three edits: the service refuses once the budget is gone, a
+# failed login counts towards it, and a successful login clears it.
+# All three are part of the same lab, so the fix table holds a list of
+# edits per lab.
+#
+# Build the list in one go. Appending to FIXES[17] repeatedly would nest
+# the list inside itself, and _edits() would then try to unpack a list
+# where it expects a (path, old, new) triple.
+FIXES[17] = [
+    (
+        JAVA / "labs/a07/LoginAttemptService.java",
+        """        // LAB 17 (VULNERABLE): nothing is counted and nothing is refused.
         //
-        // FIX: the three lines below are the fix.
+        // FIX: the two lines below are the fix.
         //
         //   if (isBlocked(username)) {
         //       throw new TooManyAttemptsException(username);
         //   }
-        //   recordFailure(username);
         //
-        // and call recordSuccess(username) on a successful login.""",
-    """        if (isBlocked(username)) {
+        // and call recordFailure(username) on a failed login and
+        // recordSuccess(username) on a successful one.""",
+        """        if (isBlocked(username)) {
             throw new TooManyAttemptsException(username);
-        }
-        recordFailure(username);""",
-)
-
-# The second half of Lab 17's fix: a successful login clears the counter.
-# Lab 17's fix is the one lab that needs two edits, so the fix table holds a
-# list of edits per lab.
-FIXES[17] = [FIXES[17], (
-    JAVA / "labs/a07/AuthController.java",
-    """        // LAB 17: a successful login should clear the account's counter.
+        }""",
+    ),
+    # The second edit: a failed login counts towards the budget.
+    (
+        JAVA / "labs/a07/AuthController.java",
+        """        // LAB 17: a failed attempt should count towards the account's budget.
+        //
+        // FIX: attempts.recordFailure(username);""",
+        """        // LAB 17: a failed attempt should count towards the account's budget.
+        //
+        // FIX: attempts.recordFailure(username);
+        attempts.recordFailure(username);""",
+    ),
+    # The third edit: a successful login clears the counter.
+    (
+        JAVA / "labs/a07/AuthController.java",
+        """        // LAB 17: a successful login should clear the account's counter.
         //
         // FIX: attempts.recordSuccess(user.getUsername());""",
-    """        // LAB 17: a successful login should clear the account's counter.
+        """        // LAB 17: a successful login should clear the account's counter.
         //
         // FIX: attempts.recordSuccess(user.getUsername());
         attempts.recordSuccess(user.getUsername());""",
-)]
+    ),
+]
 
 # --- Lab 18: rotate the session id --------------------------------------
 _fix(
@@ -342,6 +379,74 @@ _fix(
     JAVA / "labs/a07/AuthController.java",
     "        if (labs.isEnabled(\"resettoken\")) {",
     "        if (labs.isEnabled(\"resettoken\") && false) {",
+)
+
+# --- Lab 20: do not deserialize untrusted bytes -------------------------
+# The fix replaces the ObjectInputStream with a data-only parse.
+_fix(
+    20,
+    JAVA / "labs/a08/IntegrityController.java",
+    "        if (labs.isEnabled(\"deserialization\")) {",
+    "        if (labs.isEnabled(\"deserialization\") && false) {",
+)
+
+# --- Lab 21: pin the algorithm and verify the signature -----------------
+_fix(
+    21,
+    JAVA / "security/LabJwtService.java",
+    "        if (labs.isEnabled(\"jwtalgnone\") && declaresAlgNone(token)) {",
+    "        if (labs.isEnabled(\"jwtalgnone\") && declaresAlgNone(token) && false) {",
+)
+
+# --- Lab 22: a server-generated name, outside the web root ---------------
+_fix(
+    22,
+    JAVA / "labs/a08/IntegrityController.java",
+    "        if (labs.isEnabled(\"upload\")) {",
+    "        if (labs.isEnabled(\"upload\") && false) {",
+)
+
+# --- Lab 23: validate the input at the boundary -------------------------
+# Two call sites, so two edits.
+_fix(
+    23,
+    JAVA / "labs/a10/VerboseErrorController.java",
+    '        if (labs.isEnabled("verboseerror")) {',
+    '        if (labs.isEnabled("verboseerror") && false) {',
+)
+FIXES[23] = [FIXES[23], (
+    JAVA / "labs/a10/VerboseErrorController.java",
+    '        if (labs.isEnabled("verboseerror") && raw instanceof String) {',
+    '        if (labs.isEnabled("verboseerror") && raw instanceof String && false) {',
+)]
+
+# --- Lab 24: do not return the deserializer's message -------------------
+_fix(
+    24,
+    JAVA / "labs/a10/CoercionController.java",
+    '        if (labs.isEnabled("typecoercion")) {',
+    '        if (labs.isEnabled("typecoercion") && false) {',
+)
+
+# --- Lab 25: fail closed -------------------------------------------------
+# The fix is to return 401 instead of falling through to the default
+# identity. The `labs.isEnabled("failopen")` guard goes with it, so the
+# default identity can never be reached.
+_fix(
+    25,
+    JAVA / "security/LabAuthFilter.java",
+    """        if (userId == null && labs.isEnabled("failopen")
+                && header != null && header.startsWith("Bearer ")) {
+            userId = 1L;
+            role = "admin";
+            username = "admin";
+        }""",
+    """        if (userId == null && labs.isEnabled("failopen") && false
+                && header != null && header.startsWith("Bearer ")) {
+            userId = 1L;
+            role = "admin";
+            username = "admin";
+        }""",
 )
 
 
@@ -368,7 +473,7 @@ def run_harness() -> dict[int, str]:
 def build_and_restart() -> bool:
     build = subprocess.run(
         ["./mvnw", "-q", "-o", "clean", "compile"],
-        cwd=ROOT,
+        cwd=BACKEND,
         capture_output=True,
         text=True,
     )
@@ -403,7 +508,7 @@ def apply(lab_id: int) -> None:
         LAB6_BACKUP.mkdir(exist_ok=True)
         for src in LAB6_FILES:
             if src.exists():
-                dest = LAB6_BACKUP / src.relative_to(ROOT / "src/main/resources/static")
+                dest = LAB6_BACKUP / src.relative_to(LAB6_STATIC)
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.move(str(src), str(dest))
 
@@ -423,14 +528,14 @@ def revert(lab_id: int) -> None:
         revert_seed_rows()
 
     if lab_id == 6 and LAB6_BACKUP.exists():
-        for dest in LAB6_BACKUP.rglob("*"):
-            if dest.is_file():
-                src = (
-                    ROOT / "src/main/resources/static"
-                    / dest.relative_to(LAB6_BACKUP)
-                )
-                src.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(dest), str(src))
+        # Move the tree back. Directories are moved whole; files are moved
+        # one by one so a partially-moved backup still restores cleanly.
+        for dest in sorted(LAB6_BACKUP.rglob("*"), key=lambda p: len(p.parts)):
+            if dest.is_dir():
+                continue
+            src = LAB6_STATIC / dest.relative_to(LAB6_BACKUP)
+            src.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(dest), str(src))
         shutil.rmtree(LAB6_BACKUP, ignore_errors=True)
 
     for path, old, new in reversed(_edits(lab_id)):

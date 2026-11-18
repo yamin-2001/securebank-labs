@@ -51,16 +51,29 @@ stop_app() {
 }
 
 start_app() {
-    setsid ./mvnw -o spring-boot:run > "$LOG" 2>&1 &
+    # The Maven project lives in backend/, so the wrapper is invoked from
+    # there. The process group is what gets killed on stop.
+    #
+    # stdin and stdout are both redirected: a caller that captures our output
+    # (the isolation matrix does) waits for the pipe to close, and a
+    # backgrounded maven holding stdout open would hang it forever.
+    pushd backend > /dev/null || return 1
+    # Truncate the log first: the failure check below greps it, and a stale
+    # "BUILD FAILURE" from the previous run would abort this one instantly.
+    : > "$LOG"
+    setsid ./mvnw -o spring-boot:run < /dev/null > "$LOG" 2>&1 &
     echo $! > "$PIDFILE"
+    popd > /dev/null
     for i in $(seq 1 120); do
         if curl -sf http://localhost:8080/api/health >/dev/null 2>&1; then
             echo "app up after ${i}s (log: $LOG)"
             return 0
         fi
-        if grep -q "APPLICATION FAILED TO START\|BUILD FAILURE" "$LOG" 2>/dev/null; then
+        # -a: the log can contain binary bytes (the Lab 6 backup.zip is
+        # echoed into it), and grep treats a binary file as "no match".
+        if grep -aq "APPLICATION FAILED TO START\|BUILD FAILURE" "$LOG" 2>/dev/null; then
             echo "app FAILED to start — see $LOG"
-            grep -E "ERROR|Caused by" "$LOG" | head -5
+            grep -aE "ERROR|Caused by" "$LOG" | head -5
             return 1
         fi
         sleep 1

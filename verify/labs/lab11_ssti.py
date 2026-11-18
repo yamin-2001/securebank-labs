@@ -11,7 +11,7 @@ from common import Client, Result, Verdict
 ID = 11
 TITLE = "SpEL injection — the remark is evaluated as an expression"
 ENDPOINT = "POST /api/transfers/{id}/remark"
-AFFECTED = "labs/a05/SstiRemarkController.java -> remark(Long, Map)"
+AFFECTED = "backend/src/main/java/com/securebank/labs/a05/SstiRemarkController.java -> remark(Long, Map)"
 
 ARITHMETIC = "7*7"
 

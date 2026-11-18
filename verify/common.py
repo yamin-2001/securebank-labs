@@ -26,7 +26,7 @@ except ImportError:  # pragma: no cover - dependency check
 
 BASE_URL = os.environ.get("SECUREBANK_URL", "http://localhost:8080")
 
-# Seeded credentials (see src/main/resources/data.sql).
+# Seeded credentials (see backend/src/main/resources/data.sql).
 CUSTOMERS = {
     "alice": "password123",
     "bob": "qwerty",

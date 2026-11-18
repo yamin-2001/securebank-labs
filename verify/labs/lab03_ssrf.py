@@ -12,7 +12,7 @@ from common import Client, Result, Verdict
 ID = 3
 TITLE = "SSRF — make the server fetch an internal URL"
 ENDPOINT = "POST /api/accounts/statement-email"
-AFFECTED = "labs/a01/SsrfStatementService.java -> sendStatement(Long, String)"
+AFFECTED = "backend/src/main/java/com/securebank/labs/a01/SsrfStatementService.java -> sendStatement(Long, String)"
 
 # Addresses that only the server itself can reach.
 TARGETS = [

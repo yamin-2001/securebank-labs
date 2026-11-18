@@ -9,7 +9,7 @@
       "severity": "HIGH",
       "endpoints": ["GET /api/accounts/{id}"],
       "toggle": "lab.idor",
-      "fix_location": "src/main/java/com/securebank/labs/a01/AccountService.java -> getAccount(Long, Long)"
+      "fix_location": "backend/src/main/java/com/securebank/labs/a01/AccountService.java -> getAccount(Long, Long)"
     },
     {
       "id": 2,
@@ -20,7 +20,7 @@
       "severity": "CRITICAL",
       "endpoints": ["GET /api/admin/users", "GET /api/admin/accounts"],
       "toggle": "lab.privesc",
-      "fix_location": "src/main/java/com/securebank/security/SecurityConfig.java -> apiChain()"
+      "fix_location": "backend/src/main/java/com/securebank/security/SecurityConfig.java -> apiChain()"
     },
     {
       "id": 3,
@@ -31,7 +31,7 @@
       "severity": "HIGH",
       "endpoints": ["POST /api/accounts/statement-email"],
       "toggle": "lab.ssrf",
-      "fix_location": "src/main/java/com/securebank/labs/a01/SsrfStatementService.java -> sendStatement(Long, String)"
+      "fix_location": "backend/src/main/java/com/securebank/labs/a01/SsrfStatementService.java -> sendStatement(Long, String)"
     },
     {
       "id": 4,
@@ -42,7 +42,7 @@
       "severity": "LOW",
       "endpoints": ["GET /api/debug/boom"],
       "toggle": "lab.debugtrace",
-      "fix_location": "src/main/java/com/securebank/labs/a02/DebugLeakController.java -> boom(String) + application.yml"
+      "fix_location": "backend/src/main/java/com/securebank/labs/a02/DebugLeakController.java -> boom(String) + application.yml"
     },
     {
       "id": 5,
@@ -53,7 +53,7 @@
       "severity": "LOW",
       "endpoints": ["POST /admin-panel/login"],
       "toggle": "lab.admincreds",
-      "fix_location": "src/main/java/com/securebank/labs/a02/AdminPanelController.java -> login(Map)"
+      "fix_location": "backend/src/main/java/com/securebank/labs/a02/AdminPanelController.java -> login(Map)"
     },
     {
       "id": 6,
@@ -64,7 +64,7 @@
       "severity": "MEDIUM",
       "endpoints": ["GET /.env", "GET /.git/config", "GET /backup.zip"],
       "toggle": "lab.filedisclosure",
-      "fix_location": "src/main/java/com/securebank/labs/a02/SensitiveFileController.java + src/main/resources/static/"
+      "fix_location": "backend/src/main/java/com/securebank/labs/a02/SensitiveFileController.java + backend/src/main/resources/static/"
     },
     {
       "id": 7,
@@ -75,7 +75,7 @@
       "severity": "MEDIUM",
       "endpoints": ["GET /api/crypto/hashes"],
       "toggle": "lab.md5hash",
-      "fix_location": "src/main/java/com/securebank/core/Md5Hasher.java + src/main/resources/data.sql"
+      "fix_location": "backend/src/main/java/com/securebank/core/Md5Hasher.java + backend/src/main/resources/data.sql"
     },
     {
       "id": 8,
@@ -86,7 +86,7 @@
       "severity": "MEDIUM",
       "endpoints": ["any authenticated endpoint"],
       "toggle": "lab.jwtsecret",
-      "fix_location": "src/main/java/com/securebank/security/JwtKeys.java -> secret(LabToggles)"
+      "fix_location": "backend/src/main/java/com/securebank/security/JwtKeys.java -> secret(LabToggles)"
     },
     {
       "id": 9,
@@ -97,7 +97,7 @@
       "severity": "LOW",
       "endpoints": ["GET /api/crypto/profile"],
       "toggle": "lab.pii",
-      "fix_location": "src/main/java/com/securebank/labs/a04/CryptoLeakController.java -> profile()"
+      "fix_location": "backend/src/main/java/com/securebank/labs/a04/CryptoLeakController.java -> profile()"
     },
     {
       "id": 10,
@@ -108,7 +108,7 @@
       "severity": "HIGH",
       "endpoints": ["POST /api/auth/login", "GET /api/transfers/search?q="],
       "toggle": "lab.sqli",
-      "fix_location": "src/main/java/com/securebank/labs/a05/RawSqlUserLookup.java + labs/a05/InjectionController.java"
+      "fix_location": "backend/src/main/java/com/securebank/labs/a05/RawSqlUserLookup.java + labs/a05/InjectionController.java"
     },
     {
       "id": 11,
@@ -119,7 +119,7 @@
       "severity": "HIGH",
       "endpoints": ["POST /api/transfers/{id}/remark"],
       "toggle": "lab.ssti",
-      "fix_location": "src/main/java/com/securebank/labs/a05/SstiRemarkController.java -> remark(Long, Map)"
+      "fix_location": "backend/src/main/java/com/securebank/labs/a05/SstiRemarkController.java -> remark(Long, Map)"
     },
     {
       "id": 12,
@@ -130,7 +130,7 @@
       "severity": "HIGH",
       "endpoints": ["POST /api/report/generate", "POST /api/report/date-filter"],
       "toggle": "lab.cmdinject",
-      "fix_location": "src/main/java/com/securebank/labs/a05/ReportController.java -> generate(Map) and dateFilter(Map)"
+      "fix_location": "backend/src/main/java/com/securebank/labs/a05/ReportController.java -> generate(Map) and dateFilter(Map)"
     },
     {
       "id": 13,
@@ -141,7 +141,7 @@
       "severity": "MEDIUM",
       "endpoints": ["POST /api/transfers/send", "GET /api/transfers/html"],
       "toggle": "lab.xss",
-      "fix_location": "src/main/java/com/securebank/labs/a05/NoteRenderer.java -> render(String)"
+      "fix_location": "backend/src/main/java/com/securebank/labs/a05/NoteRenderer.java -> render(String)"
     },
     {
       "id": 14,
@@ -152,7 +152,7 @@
       "severity": "MEDIUM",
       "endpoints": ["POST /api/transfers/send"],
       "toggle": "lab.negativetransfer",
-      "fix_location": "src/main/java/com/securebank/labs/a06/TransferService.java -> send(Long, Long, BigDecimal, String, Long)"
+      "fix_location": "backend/src/main/java/com/securebank/labs/a06/TransferService.java -> send(Long, Long, BigDecimal, String, Long)"
     },
     {
       "id": 15,
@@ -163,7 +163,7 @@
       "severity": "MEDIUM",
       "endpoints": ["PATCH /api/profile"],
       "toggle": "lab.massassign",
-      "fix_location": "src/main/java/com/securebank/labs/a06/ProfileController.java -> update(Map)"
+      "fix_location": "backend/src/main/java/com/securebank/labs/a06/ProfileController.java -> update(Map)"
     },
     {
       "id": 16,
@@ -174,7 +174,7 @@
       "severity": "LOW",
       "endpoints": ["POST /api/auth/login"],
       "toggle": "lab.userenum",
-      "fix_location": "src/main/java/com/securebank/labs/a07/AuthController.java -> failure(String)"
+      "fix_location": "backend/src/main/java/com/securebank/labs/a07/AuthController.java -> failure(String)"
     },
     {
       "id": 17,
@@ -185,7 +185,7 @@
       "severity": "LOW",
       "endpoints": ["POST /api/auth/login"],
       "toggle": "lab.bruteforce",
-      "fix_location": "src/main/java/com/securebank/labs/a07/LoginAttemptService.java + labs/a07/AuthController.java -> login(Map)"
+      "fix_location": "backend/src/main/java/com/securebank/labs/a07/LoginAttemptService.java + labs/a07/AuthController.java -> login(Map)"
     },
     {
       "id": 18,
@@ -196,7 +196,7 @@
       "severity": "MEDIUM",
       "endpoints": ["POST /api/auth/login-session", "GET /api/session/whoami"],
       "toggle": "lab.sessionfixation",
-      "fix_location": "src/main/java/com/securebank/labs/a07/SessionLoginController.java -> loginSession(Map, HttpServletRequest)"
+      "fix_location": "backend/src/main/java/com/securebank/labs/a07/SessionLoginController.java -> loginSession(Map, HttpServletRequest)"
     },
     {
       "id": 19,
@@ -207,7 +207,73 @@
       "severity": "HIGH",
       "endpoints": ["POST /api/auth/reset-request", "POST /api/auth/reset-confirm"],
       "toggle": "lab.resettoken",
-      "fix_location": "src/main/java/com/securebank/labs/a07/AuthController.java -> resetRequest(Map)"
+      "fix_location": "backend/src/main/java/com/securebank/labs/a07/AuthController.java -> resetRequest(Map)"
+    },
+    {
+      "id": 20,
+      "slug": "deserialization",
+      "module": "lab20_deserialization",
+      "owasp": "A08",
+      "title": "Unsafe deserialization — an upload becomes remote code execution",
+      "severity": "CRITICAL",
+      "endpoints": ["POST /api/integrity/import-account"],
+      "toggle": "lab.deserialization",
+      "fix_location": "backend/src/main/java/com/securebank/labs/a08/IntegrityController.java -> importAccount(MultipartFile)"
+    },
+    {
+      "id": 21,
+      "slug": "jwtalgnone",
+      "module": "lab21_algnone",
+      "owasp": "A08",
+      "title": "JWT alg:none — forge an admin token with no key at all",
+      "severity": "CRITICAL",
+      "endpoints": ["any authenticated endpoint (the admin API proves it best)"],
+      "toggle": "lab.jwtalgnone",
+      "fix_location": "backend/src/main/java/com/securebank/security/LabJwtService.java -> parse(String)"
+    },
+    {
+      "id": 22,
+      "slug": "upload",
+      "module": "lab22_upload",
+      "owasp": "A08",
+      "title": "Unrestricted file upload — your file, your name, served as HTML",
+      "severity": "HIGH",
+      "endpoints": ["POST /api/integrity/kyc-upload"],
+      "toggle": "lab.upload",
+      "fix_location": "backend/src/main/java/com/securebank/labs/a08/IntegrityController.java -> kycUpload(MultipartFile)"
+    },
+    {
+      "id": 23,
+      "slug": "verboseerror",
+      "module": "lab23_verboseerror",
+      "owasp": "A10",
+      "title": "Verbose error — the stack trace tells the attacker how the app works",
+      "severity": "LOW",
+      "endpoints": ["GET /api/transfers/account-summary?id=abc"],
+      "toggle": "lab.verboseerror",
+      "fix_location": "backend/src/main/java/com/securebank/labs/a10/VerboseErrorController.java -> summary(String)"
+    },
+    {
+      "id": 24,
+      "slug": "typecoercion",
+      "module": "lab24_typecoercion",
+      "owasp": "A10",
+      "title": "Type coercion — the error message names your classes and fields",
+      "severity": "MEDIUM",
+      "endpoints": ["POST /api/transfers/typed-send"],
+      "toggle": "lab.typecoercion",
+      "fix_location": "backend/src/main/java/com/securebank/labs/a10/CoercionController.java -> handleUnreadable(HttpMessageNotReadableException)"
+    },
+    {
+      "id": 25,
+      "slug": "failopen",
+      "module": "lab25_failopen",
+      "owasp": "A10",
+      "title": "Fail-open authentication — a broken token becomes an admin session",
+      "severity": "CRITICAL",
+      "endpoints": ["any authenticated endpoint with a malformed Bearer token"],
+      "toggle": "lab.failopen",
+      "fix_location": "backend/src/main/java/com/securebank/security/LabAuthFilter.java -> doFilterInternal(...)"
     }
   ]
 }

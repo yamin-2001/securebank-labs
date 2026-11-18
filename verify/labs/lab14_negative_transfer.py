@@ -13,7 +13,7 @@ from common import Client, Result, Verdict
 ID = 14
 TITLE = "Negative transfer — create money from nothing"
 ENDPOINT = "POST /api/transfers/send"
-AFFECTED = "src/main/java/com/securebank/labs/a06/TransferService.java -> send(...)"
+AFFECTED = "backend/src/main/java/com/securebank/labs/a06/TransferService.java -> send(...)"
 
 FROM_ACCOUNT = 1  # ACC-1001, alice's
 TO_ACCOUNT = 2  # ACC-1002, bob's

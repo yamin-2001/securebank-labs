@@ -18,7 +18,7 @@ from common import Client, Result, Verdict
 ID = 18
 TITLE = "Session fixation — the session id survives login unchanged"
 ENDPOINT = "POST /api/auth/login-session, GET /api/session/whoami"
-AFFECTED = "labs/a07/SessionLoginController.java -> loginSession(Map, HttpServletRequest)"
+AFFECTED = "backend/src/main/java/com/securebank/labs/a07/SessionLoginController.java -> loginSession(Map, HttpServletRequest)"
 
 
 def run(ctx: Client) -> Result:

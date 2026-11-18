@@ -11,7 +11,7 @@ from common import Client, Result, Verdict
 ID = 2
 TITLE = "Privilege escalation — customer reaches the admin API"
 ENDPOINT = "GET /api/admin/users, GET /api/admin/accounts"
-AFFECTED = "security/SecurityConfig.java -> apiChain() matcher for /api/admin/**"
+AFFECTED = "backend/src/main/java/com/securebank/security/SecurityConfig.java -> apiChain() matcher for /api/admin/**"
 
 
 def run(ctx: Client) -> Result:

@@ -13,7 +13,7 @@ from common import Client, Result, Verdict
 ID = 7
 TITLE = "Unsalted MD5 password hashes — crack them offline in seconds"
 ENDPOINT = "GET /api/crypto/hashes"
-AFFECTED = "core/Md5Hasher.java + src/main/resources/data.sql"
+AFFECTED = "backend/src/main/java/com/securebank/core/Md5Hasher.java + backend/src/main/resources/data.sql"
 
 # The seeded passwords, so the harness can prove a hash is crackable.
 KNOWN = {

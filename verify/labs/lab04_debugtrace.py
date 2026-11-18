@@ -11,7 +11,7 @@ from common import Client, Result, Verdict, contains_any
 ID = 4
 TITLE = "Debug mode — stack trace exposes the JWT secret and DB credentials"
 ENDPOINT = "GET /api/debug/boom"
-AFFECTED = "labs/a02/DebugLeakController.java -> boom(String) + application.yml"
+AFFECTED = "backend/src/main/java/com/securebank/labs/a02/DebugLeakController.java -> boom(String) + application.yml"
 
 SECRET_MARKERS = [
     "hardcoded-jwt-secret",

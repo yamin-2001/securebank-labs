@@ -11,7 +11,7 @@ from common import Client, Result, Verdict
 ID = 15
 TITLE = "Mass assignment — promote yourself to admin via the profile endpoint"
 ENDPOINT = "PATCH /api/profile"
-AFFECTED = "labs/a06/ProfileController.java -> update(Map)"
+AFFECTED = "backend/src/main/java/com/securebank/labs/a06/ProfileController.java -> update(Map)"
 
 
 def run(ctx: Client) -> Result:

@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply antialiased;
+  }
+  body {
+    @apply bg-ink-900 text-slate-200;
+  }
+  /* A faint grid so the dark UI reads as a "console" rather than a blank page. */
+  body {
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-white/10 bg-white/[0.03] p-5 shadow-lg shadow-black/20;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium
+           transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-bank-500 text-white hover:bg-bank-600;
+  }
+  .btn-ghost {
+    @apply btn border border-white/10 text-slate-300 hover:bg-white/5;
+  }
+  .btn-danger {
+    @apply btn bg-rose-600/90 text-white hover:bg-rose-600;
+  }
+  .input {
+    @apply w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-slate-100
+           outline-none placeholder:text-ink-300 focus:border-bank-500;
+  }
+  .label {
+    @apply mb-1 block text-xs font-medium uppercase tracking-wide text-ink-300;
+  }
+  .pill {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold;
+  }
+  .table-row {
+    @apply border-b border-white/5 px-4 py-3 text-sm hover:bg-white/[0.03];
+  }
+}

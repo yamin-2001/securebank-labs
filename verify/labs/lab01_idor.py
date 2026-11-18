@@ -11,7 +11,7 @@ from common import Client, Result, Verdict
 ID = 1
 TITLE = "IDOR — read another customer's account by changing the id"
 ENDPOINT = "GET /api/accounts/{id}"
-AFFECTED = "labs/a01/AccountService.java -> getAccount(Long, Long)"
+AFFECTED = "backend/src/main/java/com/securebank/labs/a01/AccountService.java -> getAccount(Long, Long)"
 
 
 def run(ctx: Client) -> Result:

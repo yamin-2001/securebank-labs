@@ -10,7 +10,7 @@ from common import Client, Result, Verdict
 ID = 5
 TITLE = "Default admin credentials — admin/admin opens the operations console"
 ENDPOINT = "POST /admin-panel/login"
-AFFECTED = "labs/a02/AdminPanelController.java -> login(Map)"
+AFFECTED = "backend/src/main/java/com/securebank/labs/a02/AdminPanelController.java -> login(Map)"
 
 DEFAULT_USER = "admin"
 DEFAULT_PASS = "admin"
