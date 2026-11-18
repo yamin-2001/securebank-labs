@@ -184,8 +184,10 @@ server:
         return out;
     }"""),
     13: ("""    public String render(String note) {
-        // Escaped at the point of output. The same renderer serves the API
-        // and the React app, so both are fixed at once.
+        // Escaped at the point of output, so the API can never serve a
+        // note as live markup. The React app renders the note itself and
+        // does not use this renderer — TransfersPage.tsx must stop
+        // injecting raw markup too.
         String safe = note == null ? "" : HtmlUtils.htmlEscape(note);
         return "<div class=\\"txn-note\\">" + safe + "</div>";
     }"""),

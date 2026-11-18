@@ -132,8 +132,13 @@ With a list, the argument is one argument — there is no shell to break out
 of, so a quote in the date is just a character in a date. If you genuinely
 need a shell, the rule is: never let user input reach the command line at
 all, and never use `sh -c` with interpolated data.""",
-    13: """One renderer serves both the API and the React app, so escaping it
-here fixes both and the two can never disagree.
+    13: """The server-side renderer backs the `/api/transfers/html` endpoint,
+so escaping it here fixes that endpoint and the verification check.
+
+The React app is a *separate* render path: `TransfersPage.tsx` injects the
+raw note with `dangerouslySetInnerHTML` and does not go through this
+renderer. Escape the note here *and* stop injecting raw markup in the
+React component, or the browser stays vulnerable.
 
 The fix is to escape the note before it becomes markup:
 
@@ -147,8 +152,10 @@ escaped for one context and displayed in another, and a second round trip
 double-escapes it.
 
 The React side (`dangerouslySetInnerHTML`) is a second sink for the same
-value. Escaping server-side covers both, because the server is what
-produces the string the browser injects.""",
+value, and it is a *separate* path: the page fetches the raw note from
+`GET /api/transfers/history` and injects it itself. So the React component
+has to stop injecting raw markup too — escaping in the renderer alone
+leaves the browser vulnerable.""",
     14: """The amount must be validated before the arithmetic runs, not
 after. Two rules:
 

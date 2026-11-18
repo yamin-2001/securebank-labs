@@ -15,9 +15,13 @@ interface Transfer {
  *
  * LAB 13 (stored XSS): the note is injected with `dangerouslySetInnerHTML`.
  * That is deliberate — it matches the original lab and it is the render
- * path the fix has to cover. The API's `/api/transfers/html` endpoint is
- * produced by the same server-side renderer, so the two can never disagree
- * about whether a note is escaped.
+ * path the fix has to cover.
+ *
+ * Note that this page renders the note itself; it does not go through the
+ * server-side `NoteRenderer`. The API's `/api/transfers/html` endpoint uses
+ * that renderer, so the two are *separate* render paths: escaping in
+ * `NoteRenderer` fixes the API but leaves this page injectable. The fix
+ * for this lab has to cover both.
  */
 export default function TransfersPage() {
   const [transfers, setTransfers] = useState<Transfer[]>([])

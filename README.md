@@ -20,22 +20,34 @@ solutions/ the fix reference              →  solutions/SOLUTIONS.md
 
 ---
 
+## Start here
+
+**[`WALKTHROUGH.md`](WALKTHROUGH.md) is the guide.** It walks through all 25
+labs in order — what each vulnerability is, where in the code it lives, the
+exploit steps to reproduce it, what you should see when it works, why it
+matters, and a hint for the fix.
+
+This README covers the mechanics: how to build it, how to run it, and how
+to check your work.
+
+---
+
 ## The one rule
 
 > **A toggle arms a lab. It is never the fix.**
 
-Every lab has a flag in `src/main/resources/application.yml`:
+Every lab has a flag in `backend/src/main/resources/application.yml`:
 
 ```yaml
 lab:
-  idor:
-    enabled: true
+  idor: true
 ```
 
-`true` means *this vulnerability is live*. **Fixing a lab means changing
-code** — the flag stays `true`. That is what lets the harness assert on
-behaviour instead of on configuration: the same exploit succeeds before your
-fix and fails after it, with no flag change in between.
+The keys are flat — `lab.<slug>`, one boolean per lab. `true` means *this
+vulnerability is live*. **Fixing a lab means changing code** — the flag
+stays `true`. That is what lets the harness assert on behaviour instead of
+on configuration: the same exploit succeeds before your fix and fails after
+it, with no flag change in between.
 
 If you find yourself flipping a toggle to make a check pass, you have not
 fixed anything.
@@ -81,11 +93,11 @@ be chasing a phantom later.
 
 ## How to work through a lab
 
-1. Open the **Labs** panel in the app (top right). Each entry names the
-   endpoint, the exploit, the vulnerable code and a hint.
+1. Read the lab in [`WALKTHROUGH.md`](WALKTHROUGH.md) — what it is, where it
+   lives, how to exploit it, and a hint for the fix.
 2. Exploit it by hand. The UI is a real banking app, so most labs are
-   reachable through the interface.
-3. Fix it. The panel names the exact file and method.
+   reachable through the interface, and every one is reachable with `curl`.
+3. Fix it. The walkthrough names the exact file and method.
 4. Check your work:
 
    ```bash
@@ -96,15 +108,22 @@ be chasing a phantom later.
    and password hashes, so an exploit in one lab does not leak into the
    next.
 
+The **Labs** panel in the app (top right) shows the same metadata as
+`--show`, in the browser.
+
 ### The harness
 
 ```bash
 python3 verify/run.py --list              # the catalogue
-python3 verify/run.py --show 13           # steps, affected code, hint, fix
+python3 verify/run.py --show 13           # title, OWASP, endpoints, toggle, fix location
 python3 verify/run.py --lab 13            # run one check
 python3 verify/run.py --all --expect vulnerable
 python3 verify/run.py --all --expect fixed
 ```
+
+`--show` prints a lab's **metadata** — title, OWASP category, severity,
+endpoints, the toggle that arms it, and the file and method to fix. The
+exploit steps and the hint live in [`WALKTHROUGH.md`](WALKTHROUGH.md).
 
 Every check returns one of three verdicts:
 
@@ -132,13 +151,13 @@ says what happened.
 | 5 | A02 | Default admin credentials | `POST /admin-panel/login` |
 | 6 | A02 | Sensitive files on the web root | `GET /.env` |
 | 7 | A04 | Unsalted MD5 password hashes | `GET /api/crypto/hashes` |
-| 8 | A04 | Hardcoded JWT secret | `POST /api/auth/login` |
+| 8 | A04 | Hardcoded JWT secret | any authenticated endpoint |
 | 9 | A04 | PII in cleartext | `GET /api/crypto/profile` |
 | 10 | A05 | SQL injection | `POST /api/auth/login` |
 | 11 | A05 | SpEL injection | `POST /api/transfers/{id}/remark` |
-| 12 | A05 | SSTI + OS command injection | `POST /api/report/generate` |
+| 12 | A05 | SSTI + OS command injection | `POST /api/report/generate`, `POST /api/report/date-filter` |
 | 13 | A05 | Stored XSS | `POST /api/transfers/send` |
-| 14 | A06 | Negative transfer | `POST /api/transfers/send` |
+| 14 | A06 | Negative transfer — the amount is applied without validation | `POST /api/transfers/send` |
 | 15 | A06 | Mass assignment | `PATCH /api/profile` |
 | 16 | A07 | Account enumeration | `POST /api/auth/login` |
 | 17 | A07 | Brute force — no lockout | `POST /api/auth/login` |
@@ -172,6 +191,14 @@ Two labs need more than a one-line change, and the reference says so:
   `data.sql`. The lab does not flip to `FIXED` until both are done.
 - **Lab 7** needs the hasher changed *and* the seed rows re-hashed.
 
+And one lab needs a fix in two places:
+
+- **Lab 13** — escaping in `NoteRenderer` fixes the API endpoint and flips
+  the check, but the React app injects the raw note with
+  `dangerouslySetInnerHTML` and does not use that renderer. Fix
+  `TransfersPage.tsx` as well, or the browser stays vulnerable while the
+  harness reports `FIXED`.
+
 ---
 
 ## Is my fix real?
@@ -202,6 +229,7 @@ All 25 must report `FIXED`.
 ```
 securebank-labs/
 ├── Makefile
+├── WALKTHROUGH.md                  the guide — all 25 labs, start here
 ├── docker-compose.yml              postgres only, on localhost:5432
 │
 ├── backend/         Spring Boot 4 + Maven (its own dev server on :8080)
@@ -244,6 +272,13 @@ securebank-labs/
 
 A few decisions that are not obvious from the code:
 
+**The lab toggles are flat.** `LabToggles` reads the property `lab.<slug>`
+directly — there is no `.enabled` sub-level. `lab.idor.enabled` resolves to
+the default `false` and silently *disarms* the lab, which is the opposite
+of what it looks like. Two toggles (`lab.privesc`, `lab.filedisclosure`)
+are decorative: those two labs live in the security filter chain rather
+than behind a runtime check, so they are live whatever the flag says.
+
 **Spring Security is on the classpath, deliberately weakened.** Its
 defaults would neutralise several labs — the `NimbusJwtDecoder` rejects
 `alg:none`, the default entry point is a 302, CSRF blocks the POSTs, and
@@ -269,6 +304,14 @@ unchecked. There is no `com.fasterxml.jackson` import anywhere.
 
 **Two servers.** The Vite dev server proxies `/api` to `:8080`, so the
 browser stays same-origin and there is no CORS configuration.
+
+**The `/uploads/` path is not served in this build.** `SecurityConfig`
+matches `/uploads/**` in the API chain (`@Order(2)`) as well as in the UI
+chain (`@Order(3)`), and the lower-order chain wins — so the UI chain's
+`permitAll` for uploads is unreachable. Requests there answer `401`
+without a token and `500` with one, because `uploads/` is also not a static
+resource root. Lab 22's bytes are read back through
+`GET /api/integrity/uploads/{name}` instead.
 
 **The Lab 6 `.git` fixture is named `git-config-fixture` in the source
 tree.** Git treats a nested `.git` directory as a submodule boundary and
@@ -300,3 +343,14 @@ should answer `{"status":"up"}`.
 **`make verify` fails after I fixed a lab.** That is the point of
 `--expect vulnerable`: it asserts the *shipped* build is vulnerable. Use
 `--expect fixed` for your own build.
+
+**A lab I fixed still reports `VULNERABLE`.** Check that you fixed the
+*code* and not the toggle — the toggle stays `true` by design. If the
+detail line shows the exploit still landing, the vulnerable branch is
+still being reached: several labs keep the fix in the same method as the
+vulnerability, behind an `if (labs.isEnabled(...))` guard, so the fix
+means deleting that branch, not editing the other one.
+
+**Lab 13 reports `FIXED` but the browser is still exploitable.** Expected
+until you also fix `TransfersPage.tsx`. The harness checks the server's
+`/api/transfers/html` endpoint; the React page has its own render path.

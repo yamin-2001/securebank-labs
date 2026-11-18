@@ -148,7 +148,7 @@
       "slug": "negativetransfer",
       "module": "lab14_negative_transfer",
       "owasp": "A06",
-      "title": "Negative transfer — create money from nothing",
+      "title": "Negative transfer — the amount is applied without validation",
       "severity": "MEDIUM",
       "endpoints": ["POST /api/transfers/send"],
       "toggle": "lab.negativetransfer",

@@ -18,9 +18,10 @@ import org.springframework.transaction.annotation.Transactional;
  * <strong>LAB 14 (A06 — Insecure Design): negative transfer amounts.</strong>
  *
  * <p>The transfer amount is never validated as positive. A negative amount
- * is applied as-is to both accounts, so the sender's balance <em>grows</em>
- * and the recipient's balance <em>grows</em> too — money is created from
- * nothing.
+ * is applied as-is to both accounts, so the same negative value is added to
+ * the sender <em>and</em> the recipient — both balances shrink and the total
+ * money in the system changes, which is the invariant that must never
+ * break.
  *
  * <p>This is an insecure <em>design</em> flaw rather than an implementation
  * bug: the check was never part of the design. The endpoint is not
@@ -58,7 +59,9 @@ public class TransferService {
                          String note, Long callerUserId) {
         if (labs.isEnabled("negativetransfer")) {
             // LAB 14 (VULNERABLE): no validation of the amount, the accounts
-            // or the balance. A negative amount credits BOTH sides.
+            // or the balance. A negative amount is added to BOTH sides, so
+            // both balances shrink and the total money in the system
+            // changes.
             //
             // FIX: use sendFixed(...) below.
             Account from = accounts.findById(fromAccountId)
