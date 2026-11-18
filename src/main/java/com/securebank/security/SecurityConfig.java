@@ -50,16 +50,25 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain apiChain(HttpSecurity http) throws Exception {
         http
-                .securityMatcher("/api/**", "/uploads/**")
+                .securityMatcher("/api/**", "/uploads/**", "/admin-panel/**")
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/api/health",
                                 "/api/spike/**",
+                                // LAB 4: the debug endpoint is reachable
+                                // without authentication — that is the point.
+                                "/api/debug/**",
                                 "/api/auth/login",
                                 "/api/auth/login-session",
                                 "/api/auth/reset-request",
-                                "/api/auth/reset-confirm")
+                                "/api/auth/reset-confirm",
+                                // LAB 5: the operations console does its own
+                                // credential check (see AdminPanelController).
+                                // It is deliberately a separate URL space from
+                                // /api/admin/** so that Lab 5 and Lab 2 are
+                                // fixed independently.
+                                "/admin-panel/**")
                         .permitAll()
                         // LAB 2 (VULNERABLE): authenticated, but NO role check.
                         //

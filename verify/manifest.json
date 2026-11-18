@@ -1,0 +1,70 @@
+{
+  "labs": [
+    {
+      "id": 1,
+      "slug": "idor",
+      "module": "lab01_idor",
+      "owasp": "A01",
+      "title": "IDOR — read another customer's account by changing the id",
+      "severity": "HIGH",
+      "endpoints": ["GET /api/accounts/{id}"],
+      "toggle": "lab.idor",
+      "fix_location": "src/main/java/com/securebank/labs/a01/AccountService.java -> getAccount(Long, Long)"
+    },
+    {
+      "id": 2,
+      "slug": "privesc",
+      "module": "lab02_privesc",
+      "owasp": "A01",
+      "title": "Privilege escalation — customer reaches the admin API",
+      "severity": "CRITICAL",
+      "endpoints": ["GET /api/admin/users", "GET /api/admin/accounts"],
+      "toggle": "lab.privesc",
+      "fix_location": "src/main/java/com/securebank/security/SecurityConfig.java -> apiChain()"
+    },
+    {
+      "id": 3,
+      "slug": "ssrf",
+      "module": "lab03_ssrf",
+      "owasp": "A01",
+      "title": "SSRF — make the server fetch an internal URL",
+      "severity": "HIGH",
+      "endpoints": ["POST /api/accounts/statement-email"],
+      "toggle": "lab.ssrf",
+      "fix_location": "src/main/java/com/securebank/labs/a01/SsrfStatementService.java -> sendStatement(Long, String)"
+    },
+    {
+      "id": 4,
+      "slug": "debugtrace",
+      "module": "lab04_debugtrace",
+      "owasp": "A02",
+      "title": "Debug mode — stack trace exposes the JWT secret and DB credentials",
+      "severity": "LOW",
+      "endpoints": ["GET /api/debug/boom"],
+      "toggle": "lab.debugtrace",
+      "fix_location": "src/main/java/com/securebank/labs/a02/DebugLeakController.java -> boom(String) + application.yml"
+    },
+    {
+      "id": 5,
+      "slug": "admincreds",
+      "module": "lab05_admincreds",
+      "owasp": "A02",
+      "title": "Default admin credentials — admin/admin opens the operations console",
+      "severity": "LOW",
+      "endpoints": ["POST /admin-panel/login"],
+      "toggle": "lab.admincreds",
+      "fix_location": "src/main/java/com/securebank/labs/a02/AdminPanelController.java -> login(Map)"
+    },
+    {
+      "id": 6,
+      "slug": "filedisclosure",
+      "module": "lab06_filedisclosure",
+      "owasp": "A02",
+      "title": "Sensitive file exposure — .env, .git/config and backup.zip on the web root",
+      "severity": "MEDIUM",
+      "endpoints": ["GET /.env", "GET /.git/config", "GET /backup.zip"],
+      "toggle": "lab.filedisclosure",
+      "fix_location": "src/main/java/com/securebank/labs/a02/SensitiveFileController.java + src/main/resources/static/"
+    }
+  ]
+}
