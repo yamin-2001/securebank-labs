@@ -5,6 +5,7 @@ import java.io.IOException;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -48,6 +49,7 @@ public class SecurityConfig {
      * The main API chain: bearer-token authenticated, stateless.
      */
     @Bean
+    @Order(2)
     public SecurityFilterChain apiChain(HttpSecurity http) throws Exception {
         http
                 .securityMatcher("/api/**", "/uploads/**", "/admin-panel/**")
@@ -104,6 +106,7 @@ public class SecurityConfig {
      * ({@code request.changeSessionId()} or {@code session.invalidate()}).
      */
     @Bean
+    @Order(1)
     public SecurityFilterChain sessionChain(HttpSecurity http) throws Exception {
         http
                 .securityMatcher("/api/auth/login-session", "/api/session/**")
@@ -128,6 +131,7 @@ public class SecurityConfig {
      * Lab 22 needs uploaded files to be fetchable.
      */
     @Bean
+    @Order(3)
     public SecurityFilterChain uiChain(HttpSecurity http) throws Exception {
         http
                 .securityMatcher("/", "/index.html", "/app.js", "/style.css", "/favicon.ico",

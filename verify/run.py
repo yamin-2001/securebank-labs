@@ -94,12 +94,17 @@ def cmd_show(labs: list[dict], lab_id: int) -> int:
 
 def run_one(lab: dict, client: Client, expect: str) -> tuple[Verdict, str]:
     module = load_module(lab["module"])
+    # A fresh client per lab: the cookie jar must not leak from one lab into
+    # the next, or a lab's own state can change another lab's verdict.
+    isolated = Client(client.base)
     try:
-        result = module.run(client)
+        result = module.run(isolated)
     except HarnessError as exc:
         return Verdict.INCONCLUSIVE, str(exc)
     except Exception as exc:  # noqa: BLE001 - a broken module must not kill the run
         return Verdict.INCONCLUSIVE, f"{type(exc).__name__}: {exc}"
+    finally:
+        isolated.session.close()
     return result.verdict, result.detail
 
 

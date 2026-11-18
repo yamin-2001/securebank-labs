@@ -131,6 +131,83 @@
       "endpoints": ["POST /api/report/generate", "POST /api/report/date-filter"],
       "toggle": "lab.cmdinject",
       "fix_location": "src/main/java/com/securebank/labs/a05/ReportController.java -> generate(Map) and dateFilter(Map)"
+    },
+    {
+      "id": 13,
+      "slug": "xss",
+      "module": "lab13_xss",
+      "owasp": "A05",
+      "title": "Stored XSS — a transaction note is rendered as raw HTML",
+      "severity": "MEDIUM",
+      "endpoints": ["POST /api/transfers/send", "GET /api/transfers/html"],
+      "toggle": "lab.xss",
+      "fix_location": "src/main/java/com/securebank/labs/a05/NoteRenderer.java -> render(String)"
+    },
+    {
+      "id": 14,
+      "slug": "negativetransfer",
+      "module": "lab14_negative_transfer",
+      "owasp": "A06",
+      "title": "Negative transfer — create money from nothing",
+      "severity": "MEDIUM",
+      "endpoints": ["POST /api/transfers/send"],
+      "toggle": "lab.negativetransfer",
+      "fix_location": "src/main/java/com/securebank/labs/a06/TransferService.java -> send(Long, Long, BigDecimal, String, Long)"
+    },
+    {
+      "id": 15,
+      "slug": "massassign",
+      "module": "lab15_massassign",
+      "owasp": "A06",
+      "title": "Mass assignment — promote yourself to admin via the profile endpoint",
+      "severity": "MEDIUM",
+      "endpoints": ["PATCH /api/profile"],
+      "toggle": "lab.massassign",
+      "fix_location": "src/main/java/com/securebank/labs/a06/ProfileController.java -> update(Map)"
+    },
+    {
+      "id": 16,
+      "slug": "userenum",
+      "module": "lab16_userenum",
+      "owasp": "A06",
+      "title": "Account enumeration — the login error tells you if a user exists",
+      "severity": "LOW",
+      "endpoints": ["POST /api/auth/login"],
+      "toggle": "lab.userenum",
+      "fix_location": "src/main/java/com/securebank/labs/a07/AuthController.java -> failure(String)"
+    },
+    {
+      "id": 17,
+      "slug": "bruteforce",
+      "module": "lab17_bruteforce",
+      "owasp": "A07",
+      "title": "Brute force — the login endpoint never locks the account out",
+      "severity": "LOW",
+      "endpoints": ["POST /api/auth/login"],
+      "toggle": "lab.bruteforce",
+      "fix_location": "src/main/java/com/securebank/labs/a07/LoginAttemptService.java + labs/a07/AuthController.java -> login(Map)"
+    },
+    {
+      "id": 18,
+      "slug": "sessionfixation",
+      "module": "lab18_sessionfixation",
+      "owasp": "A07",
+      "title": "Session fixation — the session id survives login unchanged",
+      "severity": "MEDIUM",
+      "endpoints": ["POST /api/auth/login-session", "GET /api/session/whoami"],
+      "toggle": "lab.sessionfixation",
+      "fix_location": "src/main/java/com/securebank/labs/a07/SessionLoginController.java -> loginSession(Map, HttpServletRequest)"
+    },
+    {
+      "id": 19,
+      "slug": "resettoken",
+      "module": "lab19_resettoken",
+      "owasp": "A07",
+      "title": "Predictable reset token — compute it offline from the username",
+      "severity": "HIGH",
+      "endpoints": ["POST /api/auth/reset-request", "POST /api/auth/reset-confirm"],
+      "toggle": "lab.resettoken",
+      "fix_location": "src/main/java/com/securebank/labs/a07/AuthController.java -> resetRequest(Map)"
     }
   ]
 }
