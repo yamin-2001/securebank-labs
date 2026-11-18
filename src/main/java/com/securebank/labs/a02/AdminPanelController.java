@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.securebank.core.LabToggles;
-import com.securebank.core.Md5Hasher;
+import com.securebank.core.PasswordHasher;
 import com.securebank.domain.User;
 import com.securebank.domain.repo.UserRepository;
 import org.springframework.http.HttpStatus;
@@ -47,12 +47,12 @@ public class AdminPanelController {
 
     private final UserRepository users;
     private final LabToggles labs;
-    private final Md5Hasher md5;
+    private final PasswordHasher passwords;
 
-    public AdminPanelController(UserRepository users, LabToggles labs, Md5Hasher md5) {
+    public AdminPanelController(UserRepository users, LabToggles labs, PasswordHasher passwords) {
         this.users = users;
         this.labs = labs;
-        this.md5 = md5;
+        this.passwords = passwords;
     }
 
     /**
@@ -112,7 +112,7 @@ public class AdminPanelController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Invalid credentials"));
         }
-        if (!md5.matches(password, user.getPasswordHash())) {
+        if (!passwords.matches(password, user.getPasswordHash())) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Invalid credentials"));
         }

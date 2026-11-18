@@ -16,7 +16,7 @@ import io.jsonwebtoken.security.Keys;
  * <p>Holds the two JWT labs, each with its own fix location:
  * <ul>
  *   <li><strong>Lab 8</strong> — the signing secret is the hardcoded literal
- *       {@link JwtKeys#SECRET}.</li>
+ *       {@link JwtKeys#HARDCODED_SECRET}.</li>
  *   <li><strong>Lab 21</strong> — {@link #parse(String)} may hand the token to
  *       a hand-rolled parser that never inspects the {@code alg} header and
  *       never verifies the signature.</li>
@@ -35,7 +35,7 @@ public class LabJwtService {
 
     public LabJwtService(LabToggles labs) {
         this.labs = labs;
-        this.secureParser = new SecureJwtService(JwtKeys.SECRET);
+        this.secureParser = new SecureJwtService(JwtKeys.secret(labs));
     }
 
     /** Issue a token for the given principal. */
@@ -44,7 +44,8 @@ public class LabJwtService {
                 .claim("user_id", userId)
                 .claim("username", username)
                 .claim("role", role)
-                .signWith(Keys.hmacShaKeyFor(JwtKeys.SECRET.getBytes(StandardCharsets.UTF_8)),
+                .signWith(Keys.hmacShaKeyFor(
+                                JwtKeys.secret(labs).getBytes(StandardCharsets.UTF_8)),
                         Jwts.SIG.HS256)
                 .compact();
     }
@@ -62,13 +63,43 @@ public class LabJwtService {
      * and every algorithm other than HS256.
      */
     public Claims parse(String token) {
-        if (labs.isEnabled("jwtalgnone")) {
+        if (labs.isEnabled("jwtalgnone") && declaresAlgNone(token)) {
             // LAB 21 (VULNERABLE): hand-rolled parse, no alg check, no signature check.
+            //
+            // The vulnerable path is only reachable for tokens that actually
+            // declare `alg: none`. A token that declares HS256 always goes
+            // through the signature check below, so Lab 8 (the hardcoded
+            // secret) and Lab 21 (the missing alg check) stay independent:
+            // fixing one does not accidentally fix or break the other.
+            //
             // FIX: delete this branch — the secureParser below is the correct answer.
             return parseWithoutAlgorithmCheck(token);
         }
         // FIXED (and the Lab 8 default): pin HS256 and verify the signature.
         return secureParser.parse(token);
+    }
+
+    /**
+     * Does the token's header declare {@code alg: none}?
+     *
+     * <p>This is deliberately narrow. The bug being taught in Lab 21 is
+     * "the parser never looks at {@code alg}", so the vulnerable path must
+     * apply to the tokens that exploit that bug — unsecured ones. A token
+     * that declares HS256 is a different attack (Lab 8) and is judged by the
+     * signature check.
+     */
+    private boolean declaresAlgNone(String token) {
+        String[] parts = token.split("\\.");
+        if (parts.length < 2) {
+            return false;
+        }
+        try {
+            byte[] raw = Base64.getUrlDecoder().decode(parts[0]);
+            String header = new String(raw, StandardCharsets.UTF_8);
+            return header.contains("\"none\"");
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 
     /**

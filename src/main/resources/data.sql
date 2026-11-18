@@ -2,9 +2,19 @@
 --
 -- Idempotent: re-running on every boot restores a wrecked database.
 --
--- Passwords are stored as UNSALTED MD5 on purpose — this is Lab 7
--- (A04 — Cryptographic Failures). The hashes below must match
--- core/Md5Hasher.hex(...) exactly; a JUnit test asserts that.
+-- LAB 7 (A04 — Cryptographic Failures): the SHIPPED seed stores passwords
+-- as UNSALTED MD5. The hashes below must match
+-- core/PasswordHasher.md5Hex(...) exactly.
+--
+-- THE FIX for Lab 7 is to replace this block with salted hashes. Generate
+-- a replacement with:
+--     python3 verify/payloads/hash_passwords.py
+-- The format is:
+--     pbkdf2-sha256$<iterations>$<salt-b64>$<hash-b64>
+--
+-- PasswordHasher.matches() accepts BOTH formats, so the MD5 rows keep
+-- working while you migrate. Keep the DO UPDATE so a fixed seed actually
+-- replaces the vulnerable rows on the next boot.
 
 INSERT INTO users (id, username, password_hash, email, full_name, role)
 VALUES
@@ -13,7 +23,7 @@ VALUES
     (3, 'bob',   'd8578edf8458ce06fbc5bb76a58c5ca4', 'bob@bank.com',     'Bob Brown',        'customer'),
     (4, 'carol', '35d9b8a73dad4919a46dfed32701f481', 'carol@bank.com',   'Carol Clark',      'customer'),
     (5, 'dave',  '70b9f55c5b2ab6ab9e5a3fed086f1ce7', 'dave@bank.com',    'Dave Davis',       'customer')
-ON CONFLICT (username) DO NOTHING;
+ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash;
 
 INSERT INTO accounts (id, account_number, sort_code, balance, currency, owner_id)
 VALUES
