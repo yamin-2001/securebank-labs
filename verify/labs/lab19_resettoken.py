@@ -49,6 +49,22 @@ def run(ctx: Client) -> Result:
             json={"token": token, "new_password": "attacker-chosen-password"},
         )
         if r.status_code == 200:
+            # The exploit changed a seeded credential: carol's password hash
+            # in the database is now the attacker's. data.sql only re-seeds
+            # on boot, so without this the damage survives the run and the
+            # NEXT run's Lab 17 — which logs in as carol with her seeded
+            # password — fails with a misleading "unexpected HTTP 401".
+            #
+            # The restore must not fail silently: if it does, the database
+            # is left wrecked and every later check is suspect.
+            restored = ctx.reset_state()
+            if not restored:
+                return Result(
+                    Verdict.INCONCLUSIVE,
+                    f"the exploit worked ({ACCOUNT}'s password was reset), but the "
+                    "seed could not be restored — POST /api/lab/reset did not "
+                    "succeed, so the database is left with a modified password",
+                )
             return Result(
                 Verdict.VULNERABLE,
                 f"a token computed offline from the username was accepted — "
