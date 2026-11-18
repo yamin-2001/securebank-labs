@@ -62,7 +62,7 @@ public class DebugLeakController {
             // turn off server.error.include-* in application.yml.
             throw new IllegalStateException(
                     "diagnostic failure while loading profile [" + detail + "]"
-                            + " -- jwt signing secret=" + JwtKeys.SECRET
+                            + " -- jwt signing secret=" + JwtKeys.HARDCODED_SECRET
                             + " jdbc url=jdbc:postgresql://localhost:5432/securebank"
                             + " db user=securebank db password=securebank");
         }

@@ -65,6 +65,72 @@
       "endpoints": ["GET /.env", "GET /.git/config", "GET /backup.zip"],
       "toggle": "lab.filedisclosure",
       "fix_location": "src/main/java/com/securebank/labs/a02/SensitiveFileController.java + src/main/resources/static/"
+    },
+    {
+      "id": 7,
+      "slug": "md5hash",
+      "module": "lab07_md5hash",
+      "owasp": "A04",
+      "title": "Unsalted MD5 password hashes — crack them offline in seconds",
+      "severity": "MEDIUM",
+      "endpoints": ["GET /api/crypto/hashes"],
+      "toggle": "lab.md5hash",
+      "fix_location": "src/main/java/com/securebank/core/Md5Hasher.java + src/main/resources/data.sql"
+    },
+    {
+      "id": 8,
+      "slug": "jwtsecret",
+      "module": "lab08_jwtsecret",
+      "owasp": "A04",
+      "title": "Hardcoded JWT secret — forge an admin token",
+      "severity": "MEDIUM",
+      "endpoints": ["any authenticated endpoint"],
+      "toggle": "lab.jwtsecret",
+      "fix_location": "src/main/java/com/securebank/security/JwtKeys.java -> secret(LabToggles)"
+    },
+    {
+      "id": 9,
+      "slug": "pii",
+      "module": "lab09_pii",
+      "owasp": "A04",
+      "title": "PII in cleartext — the profile endpoint returns unmasked customer data",
+      "severity": "LOW",
+      "endpoints": ["GET /api/crypto/profile"],
+      "toggle": "lab.pii",
+      "fix_location": "src/main/java/com/securebank/labs/a04/CryptoLeakController.java -> profile()"
+    },
+    {
+      "id": 10,
+      "slug": "sqli",
+      "module": "lab10_sqli",
+      "owasp": "A05",
+      "title": "SQL injection — bypass the login and dump the users table",
+      "severity": "HIGH",
+      "endpoints": ["POST /api/auth/login", "GET /api/transfers/search?q="],
+      "toggle": "lab.sqli",
+      "fix_location": "src/main/java/com/securebank/labs/a05/RawSqlUserLookup.java + labs/a05/InjectionController.java"
+    },
+    {
+      "id": 11,
+      "slug": "ssti",
+      "module": "lab11_ssti",
+      "owasp": "A05",
+      "title": "SpEL injection — the remark is evaluated as an expression",
+      "severity": "HIGH",
+      "endpoints": ["POST /api/transfers/{id}/remark"],
+      "toggle": "lab.ssti",
+      "fix_location": "src/main/java/com/securebank/labs/a05/SstiRemarkController.java -> remark(Long, Map)"
+    },
+    {
+      "id": 12,
+      "slug": "cmdinject",
+      "module": "lab12_cmdinject",
+      "owasp": "A05",
+      "title": "SSTI + OS command injection — read internal config and run commands",
+      "severity": "HIGH",
+      "endpoints": ["POST /api/report/generate", "POST /api/report/date-filter"],
+      "toggle": "lab.cmdinject",
+      "fix_location": "src/main/java/com/securebank/labs/a05/ReportController.java -> generate(Map) and dateFilter(Map)"
     }
   ]
 }

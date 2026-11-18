@@ -8,6 +8,7 @@ import java.util.Map;
 
 import com.securebank.core.LabToggles;
 import com.securebank.core.Md5Hasher;
+import com.securebank.core.PasswordHasher;
 import com.securebank.domain.PasswordResetToken;
 import com.securebank.domain.User;
 import com.securebank.domain.repo.PasswordResetTokenRepository;
@@ -43,16 +44,19 @@ public class AuthController {
     private final PasswordResetTokenRepository resetTokens;
     private final RawSqlUserLookup rawSql;
     private final Md5Hasher md5;
+    private final PasswordHasher passwords;
     private final LabJwtService jwt;
     private final LabToggles labs;
 
     public AuthController(UserRepository users, PasswordResetTokenRepository resetTokens,
                           RawSqlUserLookup rawSql,
-                          Md5Hasher md5, LabJwtService jwt, LabToggles labs) {
+                          Md5Hasher md5, PasswordHasher passwords,
+                          LabJwtService jwt, LabToggles labs) {
         this.users = users;
         this.resetTokens = resetTokens;
         this.rawSql = rawSql;
         this.md5 = md5;
+        this.passwords = passwords;
         this.jwt = jwt;
         this.labs = labs;
     }
@@ -82,23 +86,31 @@ public class AuthController {
         if (labs.isEnabled("sqli")) {
             // LAB 10 (VULNERABLE): string-concatenated SQL. The username is
             // pasted into the statement, so `admin' --` comments out the
-            // password check.
+            // rest of the WHERE clause and the admin row is returned with
+            // no password check at all.
             //
             // FIX: switch to the parameterized lookup.
-            //   List<Object> rows = rawSql.findByUsernameAndPasswordHash(username, md5.hex(password));
-            //   User user = users.findByUsername(username).orElse(null);  // if you prefer JPA
-            List<Map<String, Object>> rows = rawSql.findUserRaw(
-                    username, md5.hex(password == null ? "" : password));
+            //   User user = users.findByUsername(username).orElse(null);
+            //   if (user == null || !passwords.matches(password, user.getPasswordHash())) {
+            //       return failure(username);
+            //   }
+            //
+            // Note that the password check itself lives in Java, not in the
+            // SQL — so Lab 7 (the hashing) and Lab 10 (the injection) are
+            // genuinely independent. Fixing either leaves the other alone.
+            List<Map<String, Object>> rows = rawSql.findUserRaw(username);
             User user = rows.isEmpty() ? null : toUser(rows.get(0));
             if (user == null) {
                 return failure(username);
             }
+            // The SQL comment removed the password predicate, so the password
+            // is not actually checked — that IS the vulnerability.
             return success(user);
         }
 
         // FIXED: parameterised lookup — the payload is treated as data.
         User user = users.findByUsername(username).orElse(null);
-        if (user == null || !md5.matches(password == null ? "" : password, user.getPasswordHash())) {
+        if (user == null || !passwords.matches(password == null ? "" : password, user.getPasswordHash())) {
             return failure(username);
         }
         return success(user);
@@ -222,7 +234,7 @@ public class AuthController {
                     .body(Map.of("error", "Invalid or expired reset token"));
         }
 
-        user.setPasswordHash(md5.hex(newPassword == null ? "" : newPassword));
+        user.setPasswordHash(passwords.hash(newPassword == null ? "" : newPassword));
         users.save(user);
         record.setUsed(true);
         resetTokens.save(record);

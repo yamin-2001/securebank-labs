@@ -9,16 +9,19 @@ import org.springframework.stereotype.Component;
 /**
  * <strong>LAB 10 (A05 — Injection): SQL injection.</strong>
  *
- * <p>This component builds a SQL statement by concatenating caller-supplied
- * values straight into the string, then executes it verbatim. A payload like
- * {@code admin' --} comments out the password predicate and returns the admin
- * row without a password check.
+ * <p>This component builds a SQL statement by concatenating a caller-supplied
+ * value straight into the string, then executes it verbatim. A payload like
+ * {@code admin' --} comments out the rest of the WHERE clause and returns the
+ * admin row with no password check.
+ *
+ * <p>Note that the password is <em>not</em> part of the SQL. The password
+ * check lives in Java (see {@code AuthController}). That keeps this lab
+ * independent of Lab 7 — fixing the hashing does not affect the injection,
+ * and fixing the injection does not affect the hashing.
  *
  * <p><strong>FIX:</strong> use a parameterized statement. The intended end
- * state is the {@link #findByUsernameAndPasswordHash} method below — it binds
- * the values as JDBC parameters so the payload is treated as data, never as
- * SQL. Delete the vulnerable method and switch the caller to the
- * parameterized one.
+ * state is the {@link #findByUsername} method below — it binds the username
+ * as a JDBC parameter so the payload is treated as data, never as SQL.
  */
 @Component
 public class RawSqlUserLookup {
@@ -32,26 +35,24 @@ public class RawSqlUserLookup {
     /**
      * LAB 10 (VULNERABLE): the username is concatenated into the SQL string.
      *
-     * <p>FIX: delete this method and use
-     * {@link #findByUsernameAndPasswordHash(String, String)}.
+     * <p>FIX: delete this method and use {@link #findByUsername(String)}.
      */
-    public List<Map<String, Object>> findUserRaw(String username, String passwordHash) {
+    public List<Map<String, Object>> findUserRaw(String username) {
         String sql = "SELECT id, username, password_hash, email, full_name, role, created_at"
-                + " FROM users WHERE username='" + username
-                + "' AND password_hash='" + passwordHash + "'";
+                + " FROM users WHERE username='" + username + "'";
         return jdbc.queryForList(sql);
     }
 
     /**
      * ---- FIX (the intended final state) ----
      *
-     * <p>Parameterized query: the username and the hash are bound as JDBC
-     * parameters, so {@code admin' --} is matched as a literal username
-     * instead of terminating the string.
+     * <p>Parameterized query: the username is bound as a JDBC parameter, so
+     * {@code admin' --} is matched as a literal username instead of
+     * terminating the string.
      */
-    public List<Map<String, Object>> findByUsernameAndPasswordHash(String username, String passwordHash) {
+    public List<Map<String, Object>> findByUsername(String username) {
         String sql = "SELECT id, username, password_hash, email, full_name, role, created_at"
-                + " FROM users WHERE username = ? AND password_hash = ?";
-        return jdbc.queryForList(sql, username, passwordHash);
+                + " FROM users WHERE username = ?";
+        return jdbc.queryForList(sql, username);
     }
 }
