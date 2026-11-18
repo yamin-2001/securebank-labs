@@ -130,6 +130,25 @@ def cmd_run(labs: list[dict], only: int | None, expect: str, verbose: bool) -> i
         print(f"no lab with id {only}")
         return 2
 
+    # A full run starts from the seeded state.
+    #
+    # Some exploits mutate the seed in ways that outlive the check that
+    # made them — Lab 19 resets a user's password, for instance, and
+    # data.sql only re-seeds on boot. Without this, a run against a dirty
+    # database reports a misleading INCONCLUSIVE (Lab 17 logs in as the
+    # account Lab 19 locked out) and the result depends on whatever the
+    # previous run happened to leave behind.
+    #
+    # A single --lab run is left alone: it is usually a deliberate
+    # follow-up, and resetting would wipe the state the learner is
+    # looking at.
+    if only is None:
+        if not client.reset_state():
+            print(colour("  could not reset the seeded state (POST /api/lab/reset)", RED))
+            print(f"  {DIM}the run may report spurious results — reset the database and retry{RESET}")
+            return 2
+        print(f"  {DIM}seeded state restored{RESET}\n")
+
     failures = []
     inconclusive = []
     for lab in selected:
