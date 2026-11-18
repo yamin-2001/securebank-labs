@@ -117,6 +117,18 @@ class Client:
     def admin_token(self) -> str:
         return self.login(*ADMIN)
 
+    def reset_state(self) -> bool:
+        """Restore the seeded state (balances, roles, password hashes).
+
+        Some exploits mutate the seed in ways that outlive the check that
+        made them — a password reset, for instance, leaves the account
+        locked out of its seeded credentials. A lab that does that must
+        restore the seed afterwards, or the next lab that logs in as that
+        account will fail for the wrong reason.
+        """
+        r = self.post("/api/lab/reset")
+        return r.status_code == 200
+
     # ---- JWT forging ----------------------------------------------------
     @staticmethod
     def b64url(raw: bytes) -> str:
