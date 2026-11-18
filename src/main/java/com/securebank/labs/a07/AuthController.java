@@ -17,6 +17,7 @@ import com.securebank.labs.a05.RawSqlUserLookup;
 import com.securebank.security.LabJwtService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -47,11 +48,13 @@ public class AuthController {
     private final PasswordHasher passwords;
     private final LabJwtService jwt;
     private final LabToggles labs;
+    private final LoginAttemptService attempts;
 
     public AuthController(UserRepository users, PasswordResetTokenRepository resetTokens,
                           RawSqlUserLookup rawSql,
                           Md5Hasher md5, PasswordHasher passwords,
-                          LabJwtService jwt, LabToggles labs) {
+                          LabJwtService jwt, LabToggles labs,
+                          LoginAttemptService attempts) {
         this.users = users;
         this.resetTokens = resetTokens;
         this.rawSql = rawSql;
@@ -59,6 +62,7 @@ public class AuthController {
         this.passwords = passwords;
         this.jwt = jwt;
         this.labs = labs;
+        this.attempts = attempts;
     }
 
     /**
@@ -79,9 +83,18 @@ public class AuthController {
         // LAB 17 (VULNERABLE): no rate limiting. A brute-force loop can guess
         // a weak password in seconds.
         //
-        // FIX: call a LoginAttemptService before this point and reject the
-        // request when the account has exceeded its attempt budget
-        // (see labs/a07/LoginAttemptService).
+        // FIX: the two lines below are the fix. Delete the vulnerable branch
+        // inside LoginAttemptService and call the service here:
+        //
+        //   if (attempts.isBlocked(username)) {
+        //       return tooManyAttempts();
+        //   }
+        //   ... authenticate ...
+        //   attempts.recordFailure(username);   // on failure
+        //   attempts.recordSuccess(username);   // on success
+        //
+        // The service is injected and ready; the wiring is what is missing.
+        attempts.applyRateLimit(username);
 
         if (labs.isEnabled("sqli")) {
             // LAB 10 (VULNERABLE): string-concatenated SQL. The username is
@@ -103,8 +116,22 @@ public class AuthController {
             if (user == null) {
                 return failure(username);
             }
-            // The SQL comment removed the password predicate, so the password
-            // is not actually checked — that IS the vulnerability.
+            // LAB 16 needs the "wrong password" case to actually fail, so the
+            // password is still checked here — for ordinary usernames. The
+            // SQL injection payload carries a quote, and the password check
+            // is skipped for those, which is what lets `admin' --` in
+            // without a password.
+            //
+            // The check below is NOT part of the fix for Lab 16 — Lab 16's
+            // fix is in failure(), which returns one indistinguishable
+            // message either way.
+            if (!looksInjected(username)
+                    && !passwords.matches(password == null ? "" : password, user.getPasswordHash())) {
+                return failure(username);
+            }
+            // The SQL comment removed the password predicate, so for an
+            // injected username the password is not checked at all —
+            // that IS the vulnerability.
             return success(user);
         }
 
@@ -114,6 +141,19 @@ public class AuthController {
             return failure(username);
         }
         return success(user);
+    }
+
+    /**
+     * Does this username look like it carries a SQL injection payload?
+     *
+     * <p>Used only to keep Lab 10 (the injection) and Lab 16 (the error
+     * message) independently observable: an ordinary username still has its
+     * password checked, so a wrong password reaches the error-message code;
+     * a payload username skips the check, which is the injection.
+     */
+    private boolean looksInjected(String username) {
+        return username != null
+                && (username.contains("'") || username.contains("--") || username.contains(";"));
     }
 
     /**
@@ -146,6 +186,9 @@ public class AuthController {
      * equalise the response time.
      */
     private ResponseEntity<Map<String, Object>> failure(String username) {
+        // LAB 17: a failed attempt should count towards the account's budget.
+        //
+        // FIX: attempts.recordFailure(username);
         Map<String, Object> body = new LinkedHashMap<>();
         if (labs.isEnabled("userenum")) {
             boolean exists = users.findByUsername(username).isPresent();
@@ -158,7 +201,36 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
     }
 
+    /**
+     * LAB 17 (FIX helper): the response returned once an account has spent
+     * its attempt budget.
+     *
+     * <p>FIX: return this from the login endpoint when
+     * {@code attempts.isBlocked(username)} is true.
+     */
+    private ResponseEntity<Map<String, Object>> tooManyAttempts() {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(Map.of("error", "Too many failed login attempts. Try again later."));
+    }
+
+    /**
+     * LAB 17: the account has spent its attempt budget.
+     *
+     * <p>On the vulnerable build this exception is never thrown — the
+     * vulnerable {@code applyRateLimit} neither counts nor refuses. Once the
+     * fix is in place, the service throws it and this handler turns it into
+     * a 429.
+     */
+    @ExceptionHandler(LoginAttemptService.TooManyAttemptsException.class)
+    public ResponseEntity<Map<String, Object>> tooManyAttemptsException(
+            LoginAttemptService.TooManyAttemptsException e) {
+        return tooManyAttempts();
+    }
+
     private ResponseEntity<Map<String, Object>> success(User user) {
+        // LAB 17: a successful login should clear the account's counter.
+        //
+        // FIX: attempts.recordSuccess(user.getUsername());
         String token = jwt.issue(user.getId(), user.getUsername(), user.getRole());
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("token", token);

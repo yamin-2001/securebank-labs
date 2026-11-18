@@ -29,11 +29,25 @@ stop_app() {
     if [[ -n "${holder}" ]]; then
         kill "$holder" 2>/dev/null
     fi
+    # Wait for the port to actually free up. If it does not, escalate to
+    # SIGKILL — a stale app left holding port 8080 would silently serve the
+    # OLD classes, which is very hard to debug.
     for _ in $(seq 1 30); do
         ss -lnt 'sport = :8080' 2>/dev/null | grep -q 8080 || return 0
         sleep 0.5
     done
-    return 0
+    holder="$(ss -lptn 'sport = :8080' 2>/dev/null | grep -oP 'pid=\K[0-9]+' | head -1)"
+    if [[ -n "${holder}" ]]; then
+        echo "port 8080 still held by pid $holder — sending SIGKILL"
+        kill -9 "$holder" 2>/dev/null
+        sleep 1
+    fi
+    for _ in $(seq 1 20); do
+        ss -lnt 'sport = :8080' 2>/dev/null | grep -q 8080 || return 0
+        sleep 0.5
+    done
+    echo "ERROR: port 8080 is still in use — the old app did not stop"
+    return 1
 }
 
 start_app() {
