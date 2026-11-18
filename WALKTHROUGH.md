@@ -1109,13 +1109,19 @@ and the verification script can never disagree about what is rendered.
 2. Read the notes back as HTML:
    ```bash
    curl -s http://localhost:8080/api/transfers/html \
-     -H "Authorization: Bearer $TOKEN"
+     -H "Authorization: Bearer $TOKEN" \
+     -H "Accept: text/html"
    ```
-   The endpoint always answers `text/html` — it declares
-   `produces = text/html` and takes no parameters, so it renders the
-   transfers the caller can see. The `Accept` header is therefore optional.
-   (If you send `Accept: application/json`, Spring returns `406` — a
-   representation error, not a fixed lab.)
+   The endpoint declares `produces = text/html` and takes no parameters, so
+   it renders the transfers the caller can see — but it will only serve
+   that representation. **The `Accept: text/html` header is required.**
+
+   > Without it, `curl` sends `Accept: */*` and Spring still refuses to
+   > negotiate, answering `HTTP 500` with
+   > `HttpMediaTypeNotAcceptableException: No acceptable representation`.
+   > That is a *representation* error, not a fixed lab — if you see it, add
+   > the `Accept` header rather than assuming you have fixed something.
+   > (Sending `Accept: application/json` fails the same way.)
 3. Or open the Transfers page in the browser. The React app injects the
    note with `dangerouslySetInnerHTML`, which is exactly the "render this
    string as HTML" instruction.
