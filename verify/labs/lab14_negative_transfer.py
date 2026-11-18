@@ -1,8 +1,10 @@
 """LAB 14 (A06 — Insecure Design): negative transfer amounts.
 
 Exploit: send a transfer with a negative amount. On the vulnerable build the
-amount is applied to both sides unchanged, so the sender's balance *grows*.
-On the fixed build the request is rejected with a validation error.
+amount is applied to both sides unchanged, so the same negative value is
+added to the sender *and* the recipient — money leaves both accounts and the
+total in the system changes, which is the invariant that must hold. On the
+fixed build the request is rejected with a validation error.
 
 The probe restores the balance it changes, so it does not leave the database
 in a state that would confuse another lab's check.
@@ -11,7 +13,7 @@ in a state that would confuse another lab's check.
 from common import Client, Result, Verdict
 
 ID = 14
-TITLE = "Negative transfer — create money from nothing"
+TITLE = "Negative transfer — the amount is applied without validation"
 ENDPOINT = "POST /api/transfers/send"
 AFFECTED = "backend/src/main/java/com/securebank/labs/a06/TransferService.java -> send(...)"
 

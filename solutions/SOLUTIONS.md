@@ -27,7 +27,7 @@ differ, the note says so.
 - [Lab 11 — SpEL injection — the remark is evaluated as an expression](#lab-11)
 - [Lab 12 — SSTI + OS command injection — read internal config and run commands](#lab-12)
 - [Lab 13 — Stored XSS — a transaction note is rendered as raw HTML](#lab-13)
-- [Lab 14 — Negative transfer — create money from nothing](#lab-14)
+- [Lab 14 — Negative transfer — the amount is applied without validation](#lab-14)
 - [Lab 15 — Mass assignment — promote yourself to admin via the profile endpoint](#lab-15)
 - [Lab 16 — Account enumeration — the login error tells you if a user exists](#lab-16)
 - [Lab 17 — Brute force — the login endpoint never locks the account out](#lab-17)
@@ -764,8 +764,10 @@ all, and never use `sh -c` with interpolated data.
 
 ```java
     public String render(String note) {
-        // Escaped at the point of output. The same renderer serves the API
-        // and the React app, so both are fixed at once.
+        // Escaped at the point of output, so the API can never serve a
+        // note as live markup. The React app renders the note itself and
+        // does not use this renderer — TransfersPage.tsx must stop
+        // injecting raw markup too.
         String safe = note == null ? "" : HtmlUtils.htmlEscape(note);
         return "<div class=\"txn-note\">" + safe + "</div>";
     }
@@ -773,8 +775,13 @@ all, and never use `sh -c` with interpolated data.
 
 ### Why
 
-One renderer serves both the API and the React app, so escaping it
-here fixes both and the two can never disagree.
+The server-side renderer backs the `/api/transfers/html` endpoint,
+so escaping it here fixes that endpoint and the verification check.
+
+The React app is a *separate* render path: `TransfersPage.tsx` injects the
+raw note with `dangerouslySetInnerHTML` and does not go through this
+renderer. Escape the note here *and* stop injecting raw markup in the
+React component, or the browser stays vulnerable.
 
 The fix is to escape the note before it becomes markup:
 
@@ -788,14 +795,16 @@ escaped for one context and displayed in another, and a second round trip
 double-escapes it.
 
 The React side (`dangerouslySetInnerHTML`) is a second sink for the same
-value. Escaping server-side covers both, because the server is what
-produces the string the browser injects.
+value, and it is a *separate* path: the page fetches the raw note from
+`GET /api/transfers/history` and injects it itself. So the React component
+has to stop injecting raw markup too — escaping in the renderer alone
+leaves the browser vulnerable.
 
 ---
 
 ## Lab 14
 
-**Negative transfer — create money from nothing**
+**Negative transfer — the amount is applied without validation**
 
 - OWASP: A06
 - Severity: Medium

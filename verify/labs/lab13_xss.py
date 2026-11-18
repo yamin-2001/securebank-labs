@@ -1,12 +1,13 @@
 """LAB 13 (A05 — Injection): stored XSS in transaction notes.
 
 Exploit: send a transfer whose note contains an HTML payload, then read it
-back from GET /api/transfers?format=html (the same markup the React UI
-injects with dangerouslySetInnerHTML).
+back from GET /api/transfers/html (the server-side render of the same
+markup the React UI injects with dangerouslySetInnerHTML).
 
-The note is rendered by one shared renderer, so the endpoint and the browser
-cannot disagree: raw markup means the build is vulnerable, escaped markup
-means it is fixed.
+That endpoint renders through NoteRenderer, so it and this check cannot
+disagree: raw markup means the build is vulnerable, escaped markup means it
+is fixed. Note that the React app has its own render path and does not go
+through NoteRenderer, so this check does not cover it.
 """
 
 from common import Client, Result, Verdict

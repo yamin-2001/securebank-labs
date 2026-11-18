@@ -138,19 +138,19 @@
       "owasp": "A05",
       "title": "Stored XSS — a transaction note is rendered as raw HTML",
       "severity": "high",
-      "endpoint": "POST /api/transfers/send -> GET /api/transfers?format=html",
+      "endpoint": "POST /api/transfers/send -> GET /api/transfers/html",
       "exploit": "Send a transfer whose note is <img src=x onerror=...>. It is stored and later injected into the DOM with dangerouslySetInnerHTML, so it executes in every browser that views the transaction.",
       "affected": "backend/src/main/java/com/securebank/labs/a05/NoteRenderer.java -> render(String)",
-      "hint": "One renderer serves both the API and the React app, so escaping it here fixes both. Escape the value before it becomes markup."
+      "hint": "Escape the value in the renderer before it becomes markup. Note that the React app injects the raw note with dangerouslySetInnerHTML, so fix TransfersPage.tsx too — the server-side fix alone will not protect the browser."
     },
     {
       "id": 14,
       "slug": "negative_transfer",
       "owasp": "A06",
-      "title": "Negative transfer — create money from nothing",
+      "title": "Negative transfer — the amount is applied without validation",
       "severity": "high",
       "endpoint": "POST /api/transfers/send",
-      "exploit": "Send a negative amount. The debit is subtracted from a negative number, so the source account goes up and the destination comes down.",
+      "exploit": "Send a negative amount. The same amount is added to both accounts, so both lose the money and the total in the system changes — which is the invariant that must never break.",
       "affected": "backend/src/main/java/com/securebank/labs/a06/TransferService.java",
       "hint": "Validate the amount before the arithmetic: it must be positive, and it must not exceed the balance."
     },

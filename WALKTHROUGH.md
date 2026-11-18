@@ -41,9 +41,13 @@ to compare afterwards — but read the hint first and try it yourself.
 >
 > ```yaml
 > lab:
->   idor:
->     enabled: true
+>   idor: true
 > ```
+>
+> The keys are **flat** — `lab.<slug>`, one boolean per lab. (There is no
+> `.enabled` sub-level: `LabToggles` reads the property
+> `lab.<slug>` directly, so `lab.idor.enabled` would resolve to the
+> default `false` and quietly *disarm* the lab.)
 >
 > `true` means *this vulnerability is live*. **Fixing a lab means changing
 > code.** The flag stays `true` when you are done. That is what lets the
@@ -53,6 +57,12 @@ to compare afterwards — but read the hint first and try it yourself.
 >
 > If you catch yourself flipping a toggle to make a check pass, you have not
 > fixed anything.
+>
+> Two toggles are decorative: `lab.privesc` (Lab 2) and
+> `lab.filedisclosure` (Lab 6) are never read by any code, because those
+> two labs live in the security filter chain rather than behind a runtime
+> check. Their labs are live regardless. Every other toggle is
+> load-bearing — flipping it to `false` genuinely disarms that lab.
 
 ---
 
@@ -120,7 +130,7 @@ securebank-labs/
 ├── frontend/        React 18 + Tailwind + Vite    → http://localhost:5173
 │
 ├── verify/          the verification harness       → python3 verify/run.py
-├── scripts/         app.sh, isolation_matrix.py, gen_solutions.py, real_fixes.py
+├── scripts/         app.sh, isolation_matrix.py, gen_solutions.py, real_fixes.py, why.py
 └── solutions/       the full fix reference          → solutions/SOLUTIONS.md
 ```
 
@@ -203,11 +213,16 @@ running, or the harness ran while the app was still starting.)
 
 ```bash
 python3 verify/run.py --list              # the catalogue
-python3 verify/run.py --show 13           # steps, affected code, hint, fix
+python3 verify/run.py --show 13           # title, OWASP, endpoints, toggle, fix location
 python3 verify/run.py --lab 13            # run one check
 python3 verify/run.py --all --expect vulnerable
 python3 verify/run.py --all --expect fixed
 ```
+
+> `--show` prints the lab's **metadata**: title, OWASP category, severity,
+> endpoints, the toggle that arms it, and the file and method to fix. It does
+> **not** print the exploit steps or the hint — those live here, in this
+> document, and in `solutions/SOLUTIONS.md` for the full fix.
 
 Every check returns one of three verdicts:
 
@@ -232,6 +247,12 @@ next.
 The seed is also **self-healing**: `data.sql` runs on every boot and puts the
 balances, roles and password hashes back. So if you are ever confused about
 state, restart the app.
+
+The harness also resets the seed itself before a **full** `--all` run, so
+`make verify` always starts from the same state and always gives the same
+answer. A single `--lab <id>` run does *not* reset — it leaves the database
+exactly as it found it, so you can follow up on one lab without wiping the
+evidence.
 
 ### Working on one lab at a time
 
@@ -265,13 +286,13 @@ own words.
 | 5 | A02 | Default admin credentials | `POST /admin-panel/login` |
 | 6 | A02 | Sensitive files on the web root | `GET /.env` |
 | 7 | A04 | Unsalted MD5 password hashes | `GET /api/crypto/hashes` |
-| 8 | A04 | Hardcoded JWT secret | `POST /api/auth/login` |
+| 8 | A04 | Hardcoded JWT secret | any authenticated endpoint |
 | 9 | A04 | PII in cleartext | `GET /api/crypto/profile` |
 | 10 | A05 | SQL injection | `POST /api/auth/login` |
 | 11 | A05 | SpEL injection | `POST /api/transfers/{id}/remark` |
-| 12 | A05 | SSTI + OS command injection | `POST /api/report/generate` |
+| 12 | A05 | SSTI + OS command injection | `POST /api/report/generate`, `POST /api/report/date-filter` |
 | 13 | A05 | Stored XSS | `POST /api/transfers/send` |
-| 14 | A06 | Negative transfer | `POST /api/transfers/send` |
+| 14 | A06 | Negative transfer — the amount is applied without validation | `POST /api/transfers/send` |
 | 15 | A06 | Mass assignment | `PATCH /api/profile` |
 | 16 | A06 | Account enumeration | `POST /api/auth/login` |
 | 17 | A07 | Brute force — no lockout | `POST /api/auth/login` |
@@ -338,7 +359,8 @@ with no attacker skill required beyond editing a URL.
 user ID. It currently uses only the first. What check would you add so that
 a mismatch between the two becomes an error? Think about which comparison to
 make, and what status code / exception the project already uses for "you
-may not do that" (`ForbiddenException`).
+may not do that" — look for `AccountService.AccountForbiddenException`, which
+`AccountController` already maps to `403`.
 
 ---
 
@@ -376,9 +398,10 @@ perfectly ordinary feature that was left one word short of being safe.
 several matchers, and one of them is missing the check that distinguishes a
 customer from an admin. The rule you want expresses *"the caller must have
 the ADMIN role"* rather than *"the caller must be logged in"*. Spring
-Security has a method for exactly that — you have seen it used in the
-project for role-based access. Note also: the fix must not break Lab 5,
-which authenticates at a completely different URL (`/admin-panel/login`).
+Security has a method for exactly that — `hasRole("ADMIN")` — and the
+comment sitting on the vulnerable matcher in `SecurityConfig` names it too.
+Note also: the fix must not break Lab 5, which authenticates at a completely
+different URL (`/admin-panel/login`).
 
 ---
 
@@ -423,6 +446,12 @@ network.
 `callback_status` — the server's own answer to itself, handed back to you.
 The `/api/debug/boom` target is the most dramatic: it returns the leaked
 JWT secret from inside the server's own network position.
+
+> `http://127.0.0.1:8080/api/health` and `http://localhost:8080/api/debug/boom`
+> both answer immediately. The `http://10.0.0.1/` target is a *private*
+> address that nothing is listening on here, so it will **hang and then
+> time out** — that is the network behaving correctly, not a failed
+> exploit. The loopback targets are the ones that demonstrate the point.
 
 **Why it matters.** In cloud deployments the metadata endpoint hands out
 credentials for the whole environment. SSRF is how an internet-facing app
@@ -737,8 +766,7 @@ email address, a phone number, a national ID, a sort code. Some of it is
 genuinely needed by the person it belongs to and nobody else.
 
 This endpoint returns the caller's profile **unmasked** — and it logs it
-too. A second endpoint returns it for *any* profile, which turns one
-customer's request into a directory of everyone's.
+too, in the clear, at `INFO` level.
 
 **Where it lives.**
 `backend/src/main/java/com/securebank/labs/a04/CryptoLeakController.java` →
@@ -832,15 +860,47 @@ You get a token for `admin` with `"role": "admin"`, using a password of
 ```bash
 curl -s -G http://localhost:8080/api/transfers/search \
   -H "Authorization: Bearer $TOKEN" \
-  --data-urlencode "q=' UNION SELECT id, username, password_hash, email, full_name, role, created_at FROM users--" \
+  --data-urlencode "q=' UNION SELECT id, id, id, 0, username || ' | ' || password_hash, role FROM users--" \
   | python3 -m json.tool
 ```
 
-The rows that come back are not transfers. They are the `users` table, with
-password hashes.
+The rows that come back are not all transfers. At the end of the list are
+the `users` table, with password hashes.
+
+> **Why that payload looks like that.** The vulnerable query is
+> ```sql
+> SELECT id, from_account_id, to_account_id, amount, note, status
+> FROM transfers WHERE note LIKE '%<your input>%'
+> ```
+> A `UNION` requires **the same number of columns, in the same order, with
+> compatible types**. So the injected branch must supply exactly six
+> values, and the six columns you get back are named after the *transfers*
+> table — `id`, `from_account_id`, `to_account_id`, `amount`, `note`,
+> `status` — no matter what you actually selected.
+>
+> That is why the payload puts `username` and `password_hash` into the
+> `note` slot (joined with ` | `, since `note` is `TEXT` and the others are
+> `VARCHAR`), uses `role` for `status`, and repeats `id` for the two
+> `BIGINT` account columns and `0` for the `NUMERIC` amount.
+>
+> If you try the "obvious" seven-column version
+> (`SELECT id, username, password_hash, email, full_name, role, created_at FROM users--`)
+> you get `HTTP 500` — *"each UNION query must have the same number of
+> columns"*. That is Postgres, not the lab failing.
 
 **What you should see.** A `200` login response naming `admin`, and a
-transfer list containing rows with `username` and `password_hash` in them.
+transfer list whose **last five rows** are the seeded users. Each of those
+rows carries the username and the MD5 hash in its `note` field, and the
+role in its `status` field:
+
+```json
+{"id": 1, "from_account_id": 1, "to_account_id": 1, "amount": 0,
+ "note": "alice | 482c811da5d5b4bc6d497ffa98491e38", "status": "customer"}
+{"id": 1, "from_account_id": 1, "to_account_id": 1, "amount": 0,
+ "note": "admin | 21232f297a57a5a743894a0e4a801fc3", "status": "admin"}
+```
+
+Those hashes are the ones Lab 7 cracks in one `md5sum`.
 
 **Why it matters.** SQL injection is the classic "read the whole database"
 bug. It is also usually the gateway to much worse things once an attacker
@@ -856,6 +916,11 @@ already does exactly this. So the question is: what should the login
 endpoint call instead of the raw-SQL helper, and what should happen to the
 "does the user exist" and "is the password right" checks once the query is
 safe?
+
+The same question has a second half: the *search* endpoint is injectable
+too, and its fix is the parameterized query already sitting directly below
+the vulnerable branch in `InjectionController.search(...)`. Delete the
+vulnerable branch and call that one.
 
 > **Careful with Lab 7.** The password check currently happens *in Java*,
 > not in SQL. That is deliberate — it keeps Lab 7 (hashing) and Lab 10
@@ -1016,9 +1081,20 @@ session-hijacking primitive against the people who can move money.
 `backend/src/main/java/com/securebank/labs/a05/NoteRenderer.java` →
 `render(String)`
 
-There is exactly **one** renderer, and it is shared by the API and by the
-React UI. That is deliberate: the browser and the verification script can
-never disagree about what is rendered.
+There is exactly **one** server-side renderer, and it is what the
+`GET /api/transfers/html` endpoint uses. That is deliberate: the endpoint
+and the verification script can never disagree about what is rendered.
+
+> **But the React UI does *not* use it.** `TransfersPage.tsx` fetches the raw
+> JSON from `GET /api/transfers/history` and injects `t.note` with
+> `dangerouslySetInnerHTML` directly. So the browser has its own rendering
+> path, separate from `NoteRenderer`.
+>
+> This matters for your fix: escaping in `NoteRenderer` makes
+> `GET /api/transfers/html` safe and flips the harness to `FIXED`, but the
+> React page is still injecting the raw note. **Fix the renderer *and* the
+> React component**, or the browser remains vulnerable while the check
+> reports success.
 
 **Exploit steps.**
 
@@ -1033,10 +1109,13 @@ never disagree about what is rendered.
 2. Read the notes back as HTML:
    ```bash
    curl -s http://localhost:8080/api/transfers/html \
-     -H "Authorization: Bearer $TOKEN" -H "Accept: text/html"
+     -H "Authorization: Bearer $TOKEN"
    ```
-   (The `Accept: text/html` header matters — the endpoint will not negotiate
-   any other representation.)
+   The endpoint always answers `text/html` — it declares
+   `produces = text/html` and takes no parameters, so it renders the
+   transfers the caller can see. The `Accept` header is therefore optional.
+   (If you send `Accept: application/json`, Spring returns `406` — a
+   representation error, not a fixed lab.)
 3. Or open the Transfers page in the browser. The React app injects the
    note with `dangerouslySetInnerHTML`, which is exactly the "render this
    string as HTML" instruction.
@@ -1055,9 +1134,11 @@ loses, again. The question is: **what should the server send?**
   text, not as markup. Which characters need that treatment, and is there
   a helper in the JDK or Spring that does exactly this?
 - Where should the escaping happen — in the renderer, or in the React
-  component? Think about *every* consumer of that string. If the React app
-  also uses `dangerouslySetInnerHTML`, then React will not protect you, and
-  the server is the only place that can.
+  component? Think about *every* consumer of that string. `TransfersPage.tsx`
+  uses `dangerouslySetInnerHTML`, so React will not protect you, and the
+  server is the only place that can — **but** the React component still
+  needs to stop injecting raw markup, or the browser stays vulnerable
+  even after the server-side fix.
 
 ---
 
@@ -1070,14 +1151,18 @@ design**, and no input filter will save you.*
 
 ---
 
-### Lab 14 — Negative transfer: create money from nothing `Medium`
+### Lab 14 — Negative transfer: the amount is applied without validation `Medium`
 
 **What it is.** A transfer has a *from* account, a *to* account and an
 *amount*. The obvious rule is "the amount must be positive". If nothing
-checks that, then a transfer of **−1000** does not take £1,000 away from
-alice — it *adds* £1,000 to her, while subtracting £1,000 from bob. The
-amount is applied to both sides without a sign check, so a negative number
-moves money backwards.
+checks that, then the sign of the amount stops meaning anything: the code
+applies the same `amount` to **both** sides without checking it, so a
+transfer of **−1000** takes £1,000 away from the sender *and* £1,000 away
+from the recipient.
+
+The total money in the system therefore **changes**, which is the invariant
+that must never break. A bank balance is not a number you can subtract
+from twice.
 
 This is a **business logic** bug. There is no attacker trick here, only a
 missing rule.
@@ -1100,10 +1185,19 @@ missing rule.
      -d '{"from_account_id":1,"to_account_id":2,"amount":-1000,"note":"lab 14 probe"}' \
      | python3 -m json.tool
    ```
-3. Read alice's balance again.
+3. Read alice's balance again — and bob's, too.
 
-**What you should see.** Her balance went **up** by £1,000 — £4,200 became
-£5,200. Money appeared from nowhere.
+**What you should see.** Alice's balance goes **down** by £1,000: £4,200
+becomes £3,200. Bob's balance goes **down** by £1,000 as well: £12,800
+becomes £11,800. The transfer records a "completed" £1,000 transfer, and
+yet £1,000 of money has **vanished** from the system rather than moving
+between the two accounts. £1,000 was destroyed by a transfer that claims to
+have moved it.
+
+> The direction surprises people, so read it carefully: the amount is added
+> to both sides, so a **negative** amount takes money from *both*. The
+> exploit is not that alice gains money — it is that the total changes at
+> all, and that the sender can be debited without limit.
 
 **Why it matters.** It defeats the bank's core invariant: the total amount
 of money in the system must not change. A rule that a customer can invert
@@ -1119,8 +1213,9 @@ harness accepts a `400` **or** a `422`:
 - amount that is a whole number of pence, with no sub-penny rounding?
 - amount below some per-transfer limit?
 
-The project probably already has an error type for "that request was
-malformed". Look at `core/` for it.
+The project already has an error type for "that request was malformed" —
+it is `TransferService.TransferException`, the type this very method
+throws, and `TransferController` already maps it to `400`.
 
 > **Note on balances.** This lab moves real money in the database. The
 > harness puts it back afterwards, and the seed restores balances on every
@@ -1277,8 +1372,10 @@ complete, automated account-takeover chain.
 **Hint.** The `LoginAttemptService` class already exists and is already
 injected into the login controller. What it needs is for somebody to
 actually **use** it — look at the methods it offers (`isBlocked`,
-`recordFailure`, `recordSuccess`) and decide where in `login(...)` each one
-belongs.
+`recordFailure`, `recordSuccess`, and `failureCount`) and decide where in
+`login(...)` each one belongs. The class also declares `MAX_ATTEMPTS`,
+`LOCKOUT_SECONDS` and a `TooManyAttemptsException`, so the intended
+behaviour is already written down.
 
 Then think about the design questions:
 
@@ -1419,9 +1516,12 @@ expects to be told a secret.
    `PasswordResetToken` entity already has `used` and `expiresAt` fields,
    and `resetConfirm` already checks them. So what is *actually* missing?
 
-There is also a third, subtler issue worth noticing: the reset **request**
-response tells the caller whether the account exists. Look at the message it
-returns — is it the same message for a real account and a fake one?
+There is also a third issue worth checking — but note that this one is
+**already handled**. The reset **request** response returns the same message
+("If that account exists, a reset link has been sent.") whether or not the
+account exists, so it does not leak account enumeration. Verify that with
+two requests — one real username, one fake — and if the messages differ,
+that is a regression worth reporting rather than something left to fix.
 
 ---
 
@@ -1611,15 +1711,27 @@ the client's filename and extension. Two things go wrong at once:
      -H "Authorization: Bearer $TOKEN" \
      -F "file=@/tmp/kyc-evidence.html" | python3 -m json.tool
    ```
-3. Fetch it back from the location the response gave you:
+3. Fetch it back and watch it come back as HTML:
    ```bash
-   curl -s http://localhost:8080/uploads/kyc-evidence.html
+   curl -s http://localhost:8080/api/integrity/uploads/kyc-evidence.html \
+     -H "Authorization: Bearer $TOKEN"
    ```
    Or open that URL in the browser and watch the alert fire.
 
 **What you should see.** `HTTP 200` with `"stored_as":"kyc-evidence.html"`
-and `"location":"/uploads/kyc-evidence.html"`, and the file is served back
-as HTML.
+and `"location":"/uploads/kyc-evidence.html"` from the upload call, and the
+file itself served back as `text/html` — the `<script>` runs.
+
+> **The `location` field lies.** It says `/uploads/kyc-evidence.html`, but
+> that path is **not served** — requesting it returns `401` without a token
+> and `500` with one, because the `uploads/` directory is not a static
+> resource root in this build. The endpoint that really hands the bytes
+> back is `GET /api/integrity/uploads/{name}`, which is what the harness
+> reads. Use that one.
+>
+> The flaw is unchanged either way: the **client's** filename and extension
+> were trusted, and the bytes were written where the server will serve
+> them back as HTML. That is the bug you are here to fix.
 
 **Why it matters.** An upload endpoint that serves your bytes back from
 your own origin is a stored-XSS machine with a public filename.
@@ -1630,7 +1742,10 @@ all three:
 1. **Who names the file?** The client should not. What should the stored
    name be — and where should the *original* name live instead?
 2. **Where does the file go?** "Somewhere the web server will not serve."
-   What directory should that be, and what is the current one?
+   What directory should that be, and what is the current one? (The
+   vulnerable branch writes into `UPLOAD_DIR`, which is the relative path
+   `uploads` — resolved against the backend's working directory, i.e.
+   `backend/uploads/`. The safe version writes to `var/kyc/`.)
 3. **What extension does it get?** If the name is generated by the server,
    the extension is generated too. Should an uploaded file keep the
    client's extension at all?
@@ -1638,6 +1753,13 @@ all three:
 And one more: **what is the content type of the response?** Even a
 correctly-named file can be dangerous if it is served as `text/html`. How
 does the server decide what content type to send?
+
+> Do not be misled by the `location` field the vulnerable branch returns
+> (`/uploads/<name>`). In this build that URL is not served — the
+> `uploads/` directory is not a static resource root. The bytes come back
+> from `GET /api/integrity/uploads/{name}`, which infers the content type
+> from the extension. That endpoint is what the harness reads, and it is
+> what makes the `.html` upload dangerous.
 
 ---
 
@@ -1799,15 +1921,25 @@ sensible-looking default. The default was sensible for the *code* (it needs
 
 - What should the filter do when the token is valid but names no user?
   (Return `401`. There is no identity, so there is no authoriser.)
-- Look at the class carefully: the catch block currently sets `userId = null`
-  and lets execution continue. What should it do **instead**?
-- Then find the *second* place the same problem appears — there is a second
-  block further down that also supplies a default identity. Both need to
-  go.
+- Look at the class carefully. There is exactly **one** place that invents
+  an identity: the block near the end of `doFilterInternal` that says
+  `if (userId == null && labs.isEnabled("failopen") ...)` and then sets
+  `userId = 1L; role = "admin"; username = "admin";`. **That block is the
+  bug.** Delete it — or make it refuse — and the filter falls through
+  unauthenticated, which is correct.
+- The two `catch` blocks above it are **not** the bug. Both of them already
+  call `unauthorized(res)` and `return`. They are what keeps Lab 21 and
+  Lab 25 independent, so leave them alone.
+- Note the scoping: the fail-open block is only reachable when the request
+  carried an `Authorization: Bearer ` header. A request with no
+  `Authorization` header never enters the `try` block at all, so it is
+  anonymous by default and unaffected by this bug. The bug needs a
+  *token* that names nobody.
 - And note the exception taxonomy. The project has a
   `LabMalformedTokenException` that is distinct from jjwt's
   `JwtException`. Why does that distinction matter?
-  - A **malformed** token (garbage, or `alg:none`) must be a `401`.
+  - A **structurally broken** token (garbage, not parseable) must be a
+    `401`.
   - A token with a **bad signature** must also be a `401`.
   - But you must not accidentally make a *fix for Lab 25* also change
     Lab 21's verdict, or the other way round. Check both after you fix.
@@ -1904,6 +2036,7 @@ another — the matrix proves it, but it is worth knowing where to look:
 |---|---|
 | 5 (default creds) ↔ 7 (hashing) | Both touch the admin's stored hash. Fix the *comparison* in one and the *algorithm* in the other; the seed row in `data.sql` is shared. |
 | 7 (hashing) ↔ 10 (SQLi) | Lab 10's fix moves the password check from SQL into Java. Lab 7's fix changes the algorithm that check uses. Independent — if you keep the check in Java, both stay fixed. |
+| 11 (SpEL) ↔ 12 (SSTI) | They share a toggle: the template half of Lab 12 is gated on `lab.ssti`, Lab 11's flag. Turning `lab.ssti` off disarms **both**. Their *code* is in different classes and their fixes are independent. |
 | 8 (hardcoded secret) ↔ 21 (`alg:none`) ↔ 25 (fail-open) | One `LabJwtService` and one `LabAuthFilter`. The secret matters for 8; `alg:none` does not need the secret; fail-open does not need a valid token at all. Three separate bugs, three separate fixes. |
 | 4 (debug trace) ↔ 23 (verbose error) ↔ 24 (type coercion) | Lab 23 is about the global `server.error.include-*` settings. Lab 24 has its **own** handler precisely so it does not ride on Lab 23's fix. |
 | 13 (stored XSS) ↔ 18 (session fixation) | Session fixation is usually delivered *through* a stored XSS. Fix Lab 13 and you lose the delivery mechanism for Lab 18 — but the fix for Lab 18 is still the fix for Lab 18. |
@@ -1928,7 +2061,8 @@ another — the matrix proves it, but it is worth knowing where to look:
 - `solutions/SOLUTIONS.md` — the full fix reference for all 25 labs, with
   the vulnerable code and the fixed code side by side. Compare *after* you
   have tried, not before.
-- `python3 verify/run.py --show <id>` — the exploit steps, the affected
-  code, the hint and the fix for one lab, straight from the harness.
+- `python3 verify/run.py --show <id>` — one lab's metadata: its title, OWASP
+  category, severity, endpoints, the toggle that arms it, and the file and
+  method to fix.
 - The **Labs panel** in the running app (top right of the navbar) — the same
   information, in the browser.
