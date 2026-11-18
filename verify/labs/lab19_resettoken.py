@@ -18,7 +18,7 @@ from common import Client, Result, Verdict
 ID = 19
 TITLE = "Predictable reset token — compute it offline from the username"
 ENDPOINT = "POST /api/auth/reset-request, POST /api/auth/reset-confirm"
-AFFECTED = "labs/a07/AuthController.java -> resetRequest(Map)"
+AFFECTED = "backend/src/main/java/com/securebank/labs/a07/AuthController.java -> resetRequest(Map)"
 
 ACCOUNT = "carol"
 # The window the attacker would guess: the request time, +/- a minute.

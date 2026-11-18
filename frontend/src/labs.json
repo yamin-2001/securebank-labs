@@ -1,0 +1,279 @@
+{
+  "labs": [
+    {
+      "id": 1,
+      "slug": "idor",
+      "owasp": "A01",
+      "title": "IDOR — read another customer's account",
+      "severity": "high",
+      "endpoint": "GET /api/accounts/{id}",
+      "exploit": "Log in as alice, then change the id in the request path to bob's account. The response body is bob's account — balances, owner, everything.",
+      "affected": "backend/src/main/java/com/securebank/labs/a01/AccountService.java -> getAccount(Long, AuthPrincipal)",
+      "hint": "The service fetches the account by id and returns it without ever asking whether the caller owns it. Compare the account's owner id against the authenticated principal."
+    },
+    {
+      "id": 2,
+      "slug": "privesc",
+      "owasp": "A01",
+      "title": "Privilege escalation — customer reaches the admin API",
+      "severity": "critical",
+      "endpoint": "GET /api/admin/users",
+      "exploit": "Log in as alice and call the admin endpoint with her token. It answers 200 and lists every user, password hashes included — because the matcher only requires an authenticated caller.",
+      "affected": "backend/src/main/java/com/securebank/security/SecurityConfig.java -> apiChain(...)",
+      "hint": "The matcher for /api/admin/** says .authenticated(). It needs a role requirement."
+    },
+    {
+      "id": 3,
+      "slug": "ssrf",
+      "owasp": "A01",
+      "title": "SSRF — make the server fetch an internal URL",
+      "severity": "high",
+      "endpoint": "POST /api/accounts/statement-email",
+      "exploit": "Ask for a statement to be emailed to a URL you control, and point that URL at an internal address. The server fetches it on your behalf and the response tells you what came back.",
+      "affected": "backend/src/main/java/com/securebank/labs/a01/SsrfStatementService.java",
+      "hint": "The callback URL goes straight into an HTTP client with no allowlist and no check on the resolved address."
+    },
+    {
+      "id": 4,
+      "slug": "debugtrace",
+      "owasp": "A02",
+      "title": "Debug mode — the stack trace exposes the JWT secret and DB credentials",
+      "severity": "high",
+      "endpoint": "GET /api/debug/boom",
+      "exploit": "Call the debug endpoint. The exception message and the stack trace carry the signing secret and the JDBC connection string.",
+      "affected": "backend/src/main/java/com/securebank/labs/a02/DebugLeakController.java + backend/src/main/resources/application.yml",
+      "hint": "Two halves: the exception message embeds the secrets, and server.error.include-* is set to always so the trace is rendered."
+    },
+    {
+      "id": 5,
+      "slug": "admincreds",
+      "owasp": "A02",
+      "title": "Default admin credentials — admin/admin opens the operations console",
+      "severity": "critical",
+      "endpoint": "POST /admin-panel/login",
+      "exploit": "Log in to the operations console with admin / admin. Those are the credentials the code compares against, and they are also what the seed data sets.",
+      "affected": "backend/src/main/java/com/securebank/labs/a02/AdminPanelController.java",
+      "hint": "The controller compares the submitted password against a literal. Compare against the stored hash instead, and rotate the seeded password."
+    },
+    {
+      "id": 6,
+      "slug": "filedisclosure",
+      "owasp": "A02",
+      "title": "Sensitive file exposure — .env, .git/config and backup.zip on the web root",
+      "severity": "high",
+      "endpoint": "GET /.env, /.git/config, /backup.zip",
+      "exploit": "Fetch the files directly. They are sitting in the static resource root, which Spring serves to anyone.",
+      "affected": "backend/src/main/resources/static/",
+      "hint": "These files are in the served static root. Move them outside it — the fix is to take them off the web root entirely."
+    },
+    {
+      "id": 7,
+      "slug": "md5hash",
+      "owasp": "A04",
+      "title": "Unsalted MD5 password hashes — crack them offline in seconds",
+      "severity": "high",
+      "endpoint": "GET /api/crypto/hashes",
+      "exploit": "Pull the stored hashes and run them through a rainbow table. MD5 is unsalted, so identical passwords collide and the whole table falls at once.",
+      "affected": "backend/src/main/java/com/securebank/core/Md5Hasher.java + the seed rows in data.sql",
+      "hint": "Swap the hasher for bcrypt or Argon2, and re-seed with salted hashes. The salt must be per-user and stored alongside the hash."
+    },
+    {
+      "id": 8,
+      "slug": "jwtsecret",
+      "owasp": "A04",
+      "title": "Hardcoded JWT secret — forge an admin token",
+      "severity": "critical",
+      "endpoint": "POST /api/auth/login",
+      "exploit": "Read the secret out of the source (or out of the Lab 4 stack trace), sign your own token with role=admin, and send it. The server trusts the signature.",
+      "affected": "backend/src/main/java/com/securebank/security/JwtKeys.java",
+      "hint": "The secret is a string literal in the source tree, and it is logged at startup. It needs to come from configuration or the environment, with real entropy."
+    },
+    {
+      "id": 9,
+      "slug": "pii",
+      "owasp": "A04",
+      "title": "PII in cleartext — the profile endpoint returns unmasked customer data",
+      "severity": "medium",
+      "endpoint": "GET /api/crypto/profile",
+      "exploit": "Call the endpoint and read the response. Full names, dates of birth, national IDs — unmasked, and the same data is written to the log.",
+      "affected": "backend/src/main/java/com/securebank/labs/a04/CryptoLeakController.java",
+      "hint": "Mask the sensitive fields before they leave the process, and keep them out of the log line."
+    },
+    {
+      "id": 10,
+      "slug": "sqli",
+      "owasp": "A05",
+      "title": "SQL injection — bypass the login and dump the users table",
+      "severity": "critical",
+      "endpoint": "POST /api/auth/login, GET /api/transfers/search?q=",
+      "exploit": "Log in with the username admin' -- and any password. The quote closes the string and the comment removes the rest of the WHERE clause, so the admin row comes back with no password check at all.",
+      "affected": "backend/src/main/java/com/securebank/labs/a05/InjectionAuthController.java",
+      "hint": "The username is pasted into the SQL string. Use a parameterized query and let the driver handle the quoting."
+    },
+    {
+      "id": 11,
+      "slug": "ssti",
+      "owasp": "A05",
+      "title": "SpEL injection — the remark is evaluated as an expression",
+      "severity": "critical",
+      "endpoint": "POST /api/transfers/{id}/remark",
+      "exploit": "Set the remark to 7*7 and it comes back as 49 — your input was evaluated. (Note: #{7*7} does NOT work — #{...} is template syntax, and parseExpression() takes a bare expression.) Push it further with T(java.lang.Runtime).getRuntime().exec(...) and you have code execution.",
+      "affected": "backend/src/main/java/com/securebank/labs/a05/SstiRemarkController.java",
+      "hint": "The fix is the standard idiom: the template is a constant and the user input arrives as a variable."
+    },
+    {
+      "id": 12,
+      "slug": "cmdinject",
+      "owasp": "A05",
+      "title": "SSTI + OS command injection — read internal config and run commands",
+      "severity": "critical",
+      "endpoint": "POST /api/report/generate, /api/report/date-filter",
+      "exploit": "Two bugs in two methods. The report template is evaluated as an expression, and the date filter is concatenated into a shell command, so a quote lets you run whatever you like.",
+      "affected": "backend/src/main/java/com/securebank/labs/a05/ReportServiceController.java",
+      "hint": "Two separate methods, two separate fixes. For the shell: pass arguments as a list, never as one string to sh -c."
+    },
+    {
+      "id": 13,
+      "slug": "xss",
+      "owasp": "A05",
+      "title": "Stored XSS — a transaction note is rendered as raw HTML",
+      "severity": "high",
+      "endpoint": "POST /api/transfers/send -> GET /api/transfers?format=html",
+      "exploit": "Send a transfer whose note is <img src=x onerror=...>. It is stored and later injected into the DOM with dangerouslySetInnerHTML, so it executes in every browser that views the transaction.",
+      "affected": "backend/src/main/java/com/securebank/labs/a05/NoteRenderer.java -> render(String)",
+      "hint": "One renderer serves both the API and the React app, so escaping it here fixes both. Escape the value before it becomes markup."
+    },
+    {
+      "id": 14,
+      "slug": "negative_transfer",
+      "owasp": "A06",
+      "title": "Negative transfer — create money from nothing",
+      "severity": "high",
+      "endpoint": "POST /api/transfers/send",
+      "exploit": "Send a negative amount. The debit is subtracted from a negative number, so the source account goes up and the destination comes down.",
+      "affected": "backend/src/main/java/com/securebank/labs/a06/TransferService.java",
+      "hint": "Validate the amount before the arithmetic: it must be positive, and it must not exceed the balance."
+    },
+    {
+      "id": 15,
+      "slug": "massassign",
+      "owasp": "A06",
+      "title": "Mass assignment — promote yourself to admin via the profile endpoint",
+      "severity": "critical",
+      "endpoint": "PATCH /api/profile",
+      "exploit": "Send {\"role\":\"admin\"} in the profile update body. The request is bound straight onto the entity, so your own account is rewritten.",
+      "affected": "backend/src/main/java/com/securebank/labs/a06/ProfileController.java",
+      "hint": "Bind to a dedicated update DTO that has only the fields a client is allowed to change."
+    },
+    {
+      "id": 16,
+      "slug": "userenum",
+      "owasp": "A07",
+      "title": "Account enumeration — the login error tells you if a user exists",
+      "severity": "medium",
+      "endpoint": "POST /api/auth/login",
+      "exploit": "Compare the error messages. \"User not found\" and \"Incorrect password\" are different strings, so you can tell valid usernames from invalid ones without any credentials.",
+      "affected": "backend/src/main/java/com/securebank/labs/a07/AuthController.java -> failure(String)",
+      "hint": "Return one indistinguishable message for both cases, and make the two paths take the same time."
+    },
+    {
+      "id": 17,
+      "slug": "bruteforce",
+      "owasp": "A07",
+      "title": "Brute force — the login endpoint never locks the account out",
+      "severity": "high",
+      "endpoint": "POST /api/auth/login",
+      "exploit": "Try weak passwords against one account in a loop. Nothing counts the failures and nothing refuses the request, so the sweep runs to the end.",
+      "affected": "backend/src/main/java/com/securebank/labs/a07/LoginAttemptService.java + backend/src/main/java/com/securebank/labs/a07/AuthController.java",
+      "hint": "Three edits: the service must refuse once the budget is gone, a failed login must count, and a successful login must clear the counter."
+    },
+    {
+      "id": 18,
+      "slug": "sessionfixation",
+      "owasp": "A07",
+      "title": "Session fixation — the session id survives login unchanged",
+      "severity": "high",
+      "endpoint": "POST /api/auth/login-session, GET /api/session/whoami",
+      "exploit": "Get a session id before logging in, log in as the victim with that id in the cookie, and the id stays valid afterwards. The attacker already holds it.",
+      "affected": "backend/src/main/java/com/securebank/labs/a07/SessionLoginController.java",
+      "hint": "Rotate the session id on login. Spring Security does this by default — the lab disables it with sessionFixation(none())."
+    },
+    {
+      "id": 19,
+      "slug": "resettoken",
+      "owasp": "A07",
+      "title": "Predictable reset token — compute it offline from the username",
+      "severity": "critical",
+      "endpoint": "POST /api/auth/reset-request, /reset-confirm",
+      "exploit": "The reset token is md5(username + unixTimestamp). You know the username, and the timestamp is the second the request was made, so you can compute the token yourself.",
+      "affected": "backend/src/main/java/com/securebank/labs/a07/AuthController.java",
+      "hint": "Use a cryptographically random token, store it with an expiry, and invalidate it after use."
+    },
+    {
+      "id": 20,
+      "slug": "deserialization",
+      "owasp": "A08",
+      "title": "Unsafe deserialization — an upload becomes remote code execution",
+      "severity": "critical",
+      "endpoint": "POST /api/integrity/import-account",
+      "exploit": "Upload a serialized Java object whose readObject runs a command. The server deserializes it and your command executes on the host.",
+      "affected": "backend/src/main/java/com/securebank/labs/a08/IntegrityController.java",
+      "hint": "Do not deserialize untrusted bytes. If you must, use a filter that allowlists classes — or accept JSON."
+    },
+    {
+      "id": 21,
+      "slug": "algnone",
+      "owasp": "A08",
+      "title": "JWT alg:none — forge an admin token with no key at all",
+      "severity": "critical",
+      "endpoint": "any authenticated endpoint",
+      "exploit": "Set the header's alg to none, leave the signature empty, and claim role=admin. The parser never looks at alg and never checks the signature.",
+      "affected": "backend/src/main/java/com/securebank/security/LabJwtService.java -> parseWithoutAlgorithmCheck(String)",
+      "hint": "Use a library parser that pins the algorithm and verifies the signature. jjwt's parseSignedClaims rejects alg:none outright."
+    },
+    {
+      "id": 22,
+      "slug": "upload",
+      "owasp": "A08",
+      "title": "Unrestricted file upload — your file, your name, served as HTML",
+      "severity": "high",
+      "endpoint": "POST /api/integrity/kyc-upload -> GET /uploads/{name}",
+      "exploit": "Upload an .html file. It keeps your filename, lands in the served uploads directory, and is handed back with a text/html content type — so it runs in the bank's origin.",
+      "affected": "backend/src/main/java/com/securebank/labs/a08/IntegrityController.java",
+      "hint": "Generate the stored name yourself, drop the original extension, and serve uploads as application/octet-stream from outside the web root."
+    },
+    {
+      "id": 23,
+      "slug": "verboseerror",
+      "owasp": "A10",
+      "title": "Verbose error — the stack trace tells the attacker how the app works",
+      "severity": "medium",
+      "endpoint": "GET /api/transfers/account-summary?id=abc",
+      "exploit": "Send a non-numeric id. The response carries the exception class, the package layout, and every frame of the call stack.",
+      "affected": "backend/src/main/java/com/securebank/labs/a10/VerboseErrorController.java",
+      "hint": "Catch the parse failure and return a clean 400. Turn off the global stack-trace inclusion too."
+    },
+    {
+      "id": 24,
+      "slug": "typecoercion",
+      "owasp": "A10",
+      "title": "Type coercion — the error message names your classes and fields",
+      "severity": "medium",
+      "endpoint": "POST /api/transfers/typed-send",
+      "exploit": "Send amount as a string. The binding error comes back verbatim and tells the attacker the DTO's package, class name, and field list.",
+      "affected": "backend/src/main/java/com/securebank/labs/a10/CoercionController.java",
+      "hint": "Handle HttpMessageNotReadableException yourself and return a generic message. This one has its own handler, so it is independent of Lab 23."
+    },
+    {
+      "id": 25,
+      "slug": "failopen",
+      "owasp": "A10",
+      "title": "Fail-open authentication — a token that names nobody becomes the admin",
+      "severity": "critical",
+      "endpoint": "POST /api/service/token -> GET /api/admin/users",
+      "exploit": "Get a service token from the app. It is valid and correctly signed — it just does not say who the bearer is. The filter cannot establish an identity, so it falls through to the default, and user_id 1 is the admin.",
+      "affected": "backend/src/main/java/com/securebank/security/LabAuthFilter.java -> doFilterInternal(...)",
+      "hint": "The filter must fail closed: a token that names no identity is a 401, not a default principal."
+    }
+  ]
+}

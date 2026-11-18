@@ -15,7 +15,7 @@ from common import Client, Result, Verdict
 ID = 12
 TITLE = "SSTI + OS command injection — read internal config and run commands"
 ENDPOINT = "POST /api/report/generate, POST /api/report/date-filter"
-AFFECTED = "labs/a05/ReportController.java -> generate(Map) and dateFilter(Map)"
+AFFECTED = "backend/src/main/java/com/securebank/labs/a05/ReportController.java -> generate(Map) and dateFilter(Map)"
 
 TEMPLATE_PAYLOAD = "#root['Config']['secretKey']"
 

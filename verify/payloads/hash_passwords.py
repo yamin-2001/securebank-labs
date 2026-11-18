@@ -12,7 +12,7 @@ Usage:
     python3 verify/payloads/hash_passwords.py
 
 Prints one line per seeded user. Paste the output into
-src/main/resources/data.sql to replace the unsalted MD5 hashes.
+backend/src/main/resources/data.sql to replace the unsalted MD5 hashes.
 """
 
 import base64

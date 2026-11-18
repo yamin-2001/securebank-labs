@@ -16,7 +16,7 @@ from common import Client, Result, Verdict
 ID = 10
 TITLE = "SQL injection — bypass the login and dump the users table"
 ENDPOINT = "POST /api/auth/login, GET /api/transfers/search?q="
-AFFECTED = "labs/a05/RawSqlUserLookup.java + labs/a05/InjectionController.java"
+AFFECTED = "backend/src/main/java/com/securebank/labs/a05/RawSqlUserLookup.java + backend/src/main/java/com/securebank/labs/a05/InjectionController.java"
 
 # md5 of an empty string, so the payload works regardless of the password.
 UNION_PAYLOAD = (

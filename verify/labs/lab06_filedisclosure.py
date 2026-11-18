@@ -13,7 +13,7 @@ from common import Client, Result, Verdict
 ID = 6
 TITLE = "Sensitive file exposure — .env, .git/config and backup.zip on the web root"
 ENDPOINT = "GET /.env, GET /.git/config, GET /backup.zip"
-AFFECTED = "labs/a02/SensitiveFileController.java + src/main/resources/static/"
+AFFECTED = "backend/src/main/java/com/securebank/labs/a02/SensitiveFileController.java + backend/src/main/resources/static/"
 
 ARTEFACTS = [
     ("/.env", ["AWS_ACCESS_KEY_ID", "STRIPE_SECRET_KEY", "JWT_SECRET"]),

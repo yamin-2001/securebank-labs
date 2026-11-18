@@ -11,7 +11,7 @@ from common import Client, Result, Verdict
 ID = 16
 TITLE = "Account enumeration — the login error tells you if a user exists"
 ENDPOINT = "POST /api/auth/login"
-AFFECTED = "labs/a07/AuthController.java -> failure(String)"
+AFFECTED = "backend/src/main/java/com/securebank/labs/a07/AuthController.java -> failure(String)"
 
 MISSING = "notauser"
 REAL = "alice"

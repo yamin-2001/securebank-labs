@@ -10,7 +10,7 @@ from common import Client, Result, Verdict
 ID = 9
 TITLE = "PII in cleartext — the profile endpoint returns unmasked customer data"
 ENDPOINT = "GET /api/crypto/profile"
-AFFECTED = "labs/a04/CryptoLeakController.java -> profile()"
+AFFECTED = "backend/src/main/java/com/securebank/labs/a04/CryptoLeakController.java -> profile()"
 
 # Values that must NOT appear in the response once the lab is fixed.
 LEAK_MARKERS = {
