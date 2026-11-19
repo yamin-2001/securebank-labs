@@ -11,7 +11,7 @@ from common import Client, Result, Verdict
 ID = 8
 TITLE = "Hardcoded JWT secret — forge an admin token"
 ENDPOINT = "any authenticated endpoint (the admin API proves it best)"
-AFFECTED = "backend/src/main/java/com/securebank/security/JwtKeys.java -> secret()"
+AFFECTED = "backend/src/main/java/com/securebank/security/JwtKeys.java -> secret(LabToggles)"
 
 HARDCODED_SECRET = "hardcoded-jwt-secret-do-not-ship-2024"
 
