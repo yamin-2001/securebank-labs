@@ -26,6 +26,22 @@ EVIL_NAME = "kyc-evidence.html"
 MARKER = "securebank-upload-probe"
 
 
+def _is_undownloadable(response) -> bool:
+    """Could the browser possibly render these bytes as HTML in our origin?
+
+    A response is safe when the server tells the browser not to guess:
+    `X-Content-Type-Options: nosniff` stops content sniffing, and
+    `Content-Disposition: attachment` forces a download rather than an
+    inline render. Either one is enough.
+    """
+    headers = response.headers
+    if headers.get("X-Content-Type-Options", "").lower() == "nosniff":
+        return True
+    if "attachment" in headers.get("Content-Disposition", "").lower():
+        return True
+    return False
+
+
 def run(ctx: Client) -> Result:
     token = ctx.token("alice")
 
@@ -66,7 +82,10 @@ def run(ctx: Client) -> Result:
         content_type = served.headers.get("Content-Type", "")
         if "text/html" in content_type.lower():
             served_html = True
-        elif MARKER in served.text:
+        elif MARKER in served.text and not _is_undownloadable(served):
+            # The bytes came back but the browser would not render them:
+            # either the content type is not renderable, or the response
+            # forbids sniffing and forces a download.
             served_html = True
 
     if name_kept or served_html:

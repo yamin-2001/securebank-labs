@@ -28,12 +28,12 @@ import org.springframework.web.multipart.MultipartFile;
  *
  * <p>Home to two labs, each with its own fix location:
  * <ul>
- *   <li><strong>LAB 20</strong> (A08) — unsafe deserialization. The uploaded
- *       bytes are handed to {@code ObjectInputStream}; see
+ *   <li><strong>LAB 20 (FIXED)</strong> (A08) — unsafe deserialization. The
+ *       uploaded bytes used to be handed to {@code ObjectInputStream}; see
  *       {@link #importAccount}.</li>
- *   <li><strong>LAB 22</strong> (A08) — unrestricted file upload. The
- *       original filename is preserved and the file is served from the web
- *       root; see {@link #kycUpload}.</li>
+ *   <li><strong>LAB 22 (FIXED)</strong> (A08) — unrestricted file upload. The
+ *       original filename used to be preserved and the file served from the
+ *       web root; see {@link #kycUpload}.</li>
  * </ul>
  *
  * <p>They share a controller because they share a theme — <em>the server
@@ -47,18 +47,13 @@ public class IntegrityController {
     /**
      * Where the uploaded KYC documents land.
      *
-     * <p><strong>LAB 22 (VULNERABLE):</strong> this is inside the static
-     * resource root, so the uploaded file is served back over HTTP with the
-     * content type the browser infers from its extension. An uploaded
-     * {@code .html} file is therefore a stored XSS payload that the server
-     * itself hands out.
+     * <p><strong>LAB 22 (FIXED):</strong> this is outside the static
+     * resource root, so the uploaded file is never served back over HTTP
+     * with a content type the browser infers from its name.
      */
-    private static final Path UPLOAD_DIR = Paths.get("uploads");
+    private static final Path UPLOAD_DIR = Paths.get("var", "kyc");
 
-    private final LabToggles labs;
-
-    public IntegrityController(LabToggles labs) {
-        this.labs = labs;
+    public IntegrityController() {
     }
 
     /**
@@ -92,68 +87,23 @@ public class IntegrityController {
     /**
      * Upload a KYC document.
      *
-     * <p><strong>LAB 22 (VULNERABLE):</strong> the file keeps its original
-     * name and extension and is written into the web root, so it is served
-     * back as whatever the browser thinks it is. A {@code .html} upload
-     * becomes stored XSS delivered by the server itself; a {@code .jsp} or
-     * {@code .svg} upload is worse.
+     * <p><strong>LAB 22 (FIXED):</strong> the file used to keep its original
+     * name and extension and be written into the web root, so it was served
+     * back as whatever the browser thought it was. A {@code .html} upload
+     * became stored XSS delivered by the server itself; a {@code .jsp} or
+     * {@code .svg} upload was worse.
      *
-     * <p><strong>FIX:</strong>
-     * <ul>
-     *   <li>generate the stored name yourself (a UUID) and keep the
-     *       original only as metadata;</li>
-     *   <li>allowlist the extensions and content types you accept;</li>
-     *   <li>store the file outside the web root and serve it through a
-     *       controller that sets {@code Content-Disposition: attachment} and
-     *       a fixed content type;</li>
-     *   <li>never let a user-supplied name reach the filesystem.</li>
-     * </ul>
+     * <p>Now the stored name is a UUID the server generated, the original
+     * name is kept only as metadata, the bytes go to a directory outside the
+     * web root, and the extension is fixed — so an uploaded {@code .html}
+     * file can never be served back as HTML from the site's own origin.
      */
     @PostMapping("/kyc-upload")
     public ResponseEntity<Map<String, Object>> kycUpload(@RequestParam("file") MultipartFile file) {
-        String originalName = file.getOriginalFilename();
-        Map<String, Object> out = new LinkedHashMap<>();
-
-        if (labs.isEnabled("upload")) {
-            // LAB 22 (VULNERABLE): the original name and extension are
-            // trusted, and the file is written into the static resource root.
-            //
-            // FIX: delete this branch and call storeUploadSafely(file) instead.
-            try {
-                Files.createDirectories(UPLOAD_DIR);
-                Path target = UPLOAD_DIR.resolve(originalName == null ? "upload.bin" : originalName);
-                Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
-
-                out.put("message", "Upload stored");
-                out.put("stored_as", target.getFileName().toString());
-                out.put("location", "/uploads/" + target.getFileName());
-                out.put("content_type", contentTypeFor(originalName));
-                return ResponseEntity.ok(out);
-            } catch (IOException e) {
-                out.put("error", "Could not store the upload");
-                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(out);
-            }
-        }
-
-        // ---- FIX (the intended final state) ----
-        // The stored name is generated, the extension is not the client's to
-        // choose, and the file never lands in the web root.
-        return storeUploadSafely(file);
-    }
-
-    /**
-     * ---- FIX (the intended final state) -------------------------------
-     *
-     * <p>The stored name is a UUID the server generated. The original name is
-     * kept only as metadata, the bytes go to a directory outside the web
-     * root, and the extension is fixed — so an uploaded {@code .html} file
-     * can never be served back as HTML from the site's own origin.
-     */
-    private ResponseEntity<Map<String, Object>> storeUploadSafely(MultipartFile file) {
         String stored = UUID.randomUUID() + ".bin";
-        Path target = Paths.get("var", "kyc", stored);
+        Path target = UPLOAD_DIR.resolve(stored);
         try {
-            Files.createDirectories(target.getParent());
+            Files.createDirectories(UPLOAD_DIR);
             Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -167,64 +117,12 @@ public class IntegrityController {
     }
 
     /**
-     * The content type a browser would infer from the extension.
-     *
-     * <p>Used by the vulnerable path so the response tells the client how the
-     * file will be treated. {@code .html} and {@code .svg} are the dangerous
-     * ones: the browser renders them, so the upload executes in the site's
-     * origin.
-     */
-    private String contentTypeFor(String filename) {
-        if (filename == null) {
-            return "application/octet-stream";
-        }
-        String lower = filename.toLowerCase(Locale.ROOT);
-        if (lower.endsWith(".html") || lower.endsWith(".htm")) {
-            return "text/html";
-        }
-        if (lower.endsWith(".svg")) {
-            return "image/svg+xml";
-        }
-        if (lower.endsWith(".js")) {
-            return "text/javascript";
-        }
-        if (lower.endsWith(".png")) {
-            return "image/png";
-        }
-        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
-            return "image/jpeg";
-        }
-        return "application/octet-stream";
-    }
-
-    /**
-     * What the uploads directory currently holds.
-     *
-     * <p>Lets the harness see that a file was stored, and lets the learner
-     * see the shape of the problem.
-     */
-    @GetMapping("/uploads")
-    public ResponseEntity<Map<String, Object>> listUploads() {
-        Map<String, Object> out = new LinkedHashMap<>();
-        try {
-            if (Files.isDirectory(UPLOAD_DIR)) {
-                try (var files = Files.list(UPLOAD_DIR)) {
-                    out.put("uploads", files.map(p -> p.getFileName().toString()).sorted().toList());
-                }
-            } else {
-                out.put("uploads", java.util.List.of());
-            }
-        } catch (IOException e) {
-            out.put("uploads", java.util.List.of());
-        }
-        return ResponseEntity.ok(out);
-    }
-
-    /**
      * Read an uploaded file's bytes back.
      *
-     * <p>Used by the harness to confirm the upload really landed on disk with
-     * the name the attacker chose.
+     * <p><strong>LAB 22 (FIXED):</strong> the response always carries a
+     * fixed content type and {@code Content-Disposition: attachment}, so the
+     * browser downloads the file instead of rendering it in the site's
+     * origin. The name is only ever the server-generated one.
      */
     @GetMapping("/uploads/{name}")
     public ResponseEntity<byte[]> fetchUpload(@PathVariable String name) {
@@ -235,7 +133,8 @@ public class IntegrityController {
         try {
             byte[] bytes = Files.readAllBytes(target);
             return ResponseEntity.ok()
-                    .header("Content-Type", contentTypeFor(name))
+                    .header("Content-Type", "application/octet-stream")
+                    .header("Content-Disposition", "attachment; filename=\"" + target.getFileName() + "\"")
                     .body(bytes);
         } catch (IOException e) {
             return ResponseEntity.notFound().build();
