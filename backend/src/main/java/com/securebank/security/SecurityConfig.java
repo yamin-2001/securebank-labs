@@ -109,13 +109,10 @@ public class SecurityConfig {
     /**
      * The session chain for Lab 18 (session fixation).
      *
-     * <p>{@code sessionFixation(none())} disables Spring Security's default
-     * session-id rotation on login. Without this, the lab would be
-     * unexploitable — the framework would already be doing the right thing.
-     *
-     * <p><strong>FIX (Lab 18):</strong> remove {@code sessionFixation(none())}
-     * and rotate the session id explicitly in the controller
-     * ({@code request.changeSessionId()} or {@code session.invalidate()}).
+     * <p><strong>LAB 18 (FIXED):</strong> {@code sessionFixation(none())} used
+     * to disable Spring Security's default session-id rotation on login.
+     * That line is gone, so the framework's protection applies again, and
+     * the controller rotates the id explicitly as well.
      */
     @Bean
     @Order(1)
@@ -124,9 +121,7 @@ public class SecurityConfig {
                 .securityMatcher("/api/auth/login-session", "/api/session/**")
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm
-                        // LAB 18 (VULNERABLE): the session id is not rotated on login.
-                        // FIX: delete this line so the default protection applies.
-                        .sessionFixation(fixation -> fixation.none()))
+                        .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(jsonEntryPoint()))
                 .formLogin(form -> form.disable())
