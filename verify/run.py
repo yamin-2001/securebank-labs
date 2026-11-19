@@ -11,7 +11,8 @@ Usage
     python3 verify/run.py --all --expect fixed        # after you fixed them
 
 The harness talks to the running app over HTTP and observes behaviour only.
-It never reads application source and never inspects the lab toggles.
+It never reads application source and never inspects the application's
+configuration — it only sends real requests and looks at real responses.
 """
 
 from __future__ import annotations
@@ -81,7 +82,6 @@ def cmd_show(labs: list[dict], lab_id: int) -> int:
     print(f"{BOLD}LAB {lab['id']} — {lab['title']}{RESET}")
     print(f"  OWASP      : {lab['owasp']}  ({lab['severity']})")
     print(f"  Endpoints  : {', '.join(lab['endpoints'])}")
-    print(f"  Toggle     : {lab['toggle']}  (arms the lab — it is NOT the fix)")
     print(f"  Fix here   : {lab['fix_location']}")
     for attr, label in (("STEPS", "Exploit steps"), ("AFFECTED", "Affected code")):
         value = getattr(module, attr, None)

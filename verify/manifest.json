@@ -8,7 +8,6 @@
       "title": "IDOR — read another customer's account by changing the id",
       "severity": "HIGH",
       "endpoints": ["GET /api/accounts/{id}"],
-      "toggle": "lab.idor",
       "fix_location": "backend/src/main/java/com/securebank/labs/a01/AccountService.java -> getAccount(Long, Long)"
     },
     {
@@ -19,7 +18,6 @@
       "title": "Privilege escalation — customer reaches the admin API",
       "severity": "CRITICAL",
       "endpoints": ["GET /api/admin/users", "GET /api/admin/accounts"],
-      "toggle": "lab.privesc",
       "fix_location": "backend/src/main/java/com/securebank/security/SecurityConfig.java -> apiChain()"
     },
     {
@@ -30,7 +28,6 @@
       "title": "SSRF — make the server fetch an internal URL",
       "severity": "HIGH",
       "endpoints": ["POST /api/accounts/statement-email"],
-      "toggle": "lab.ssrf",
       "fix_location": "backend/src/main/java/com/securebank/labs/a01/SsrfStatementService.java -> sendStatement(Long, String)"
     },
     {
@@ -41,7 +38,6 @@
       "title": "Debug mode — stack trace exposes the JWT secret and DB credentials",
       "severity": "LOW",
       "endpoints": ["GET /api/debug/boom"],
-      "toggle": "lab.debugtrace",
       "fix_location": "backend/src/main/java/com/securebank/labs/a02/DebugLeakController.java -> boom(String) + application.yml"
     },
     {
@@ -52,7 +48,6 @@
       "title": "Default admin credentials — admin/admin opens the operations console",
       "severity": "LOW",
       "endpoints": ["POST /admin-panel/login"],
-      "toggle": "lab.admincreds",
       "fix_location": "backend/src/main/java/com/securebank/labs/a02/AdminPanelController.java -> login(Map)"
     },
     {
@@ -63,7 +58,6 @@
       "title": "Sensitive file exposure — .env, .git/config and backup.zip on the web root",
       "severity": "MEDIUM",
       "endpoints": ["GET /.env", "GET /.git/config", "GET /backup.zip"],
-      "toggle": "lab.filedisclosure",
       "fix_location": "backend/src/main/java/com/securebank/labs/a02/SensitiveFileController.java + backend/src/main/resources/static/"
     },
     {
@@ -74,7 +68,6 @@
       "title": "Unsalted MD5 password hashes — crack them offline in seconds",
       "severity": "MEDIUM",
       "endpoints": ["GET /api/crypto/hashes"],
-      "toggle": "lab.md5hash",
       "fix_location": "backend/src/main/java/com/securebank/core/Md5Hasher.java + backend/src/main/resources/data.sql"
     },
     {
@@ -85,8 +78,7 @@
       "title": "Hardcoded JWT secret — forge an admin token",
       "severity": "MEDIUM",
       "endpoints": ["any authenticated endpoint"],
-      "toggle": "lab.jwtsecret",
-      "fix_location": "backend/src/main/java/com/securebank/security/JwtKeys.java -> secret(LabToggles)"
+      "fix_location": "backend/src/main/java/com/securebank/security/JwtKeys.java -> secret()"
     },
     {
       "id": 9,
@@ -96,7 +88,6 @@
       "title": "PII in cleartext — the profile endpoint returns unmasked customer data",
       "severity": "LOW",
       "endpoints": ["GET /api/crypto/profile"],
-      "toggle": "lab.pii",
       "fix_location": "backend/src/main/java/com/securebank/labs/a04/CryptoLeakController.java -> profile()"
     },
     {
@@ -107,7 +98,6 @@
       "title": "SQL injection — bypass the login and dump the users table",
       "severity": "HIGH",
       "endpoints": ["POST /api/auth/login", "GET /api/transfers/search?q="],
-      "toggle": "lab.sqli",
       "fix_location": "backend/src/main/java/com/securebank/labs/a05/RawSqlUserLookup.java + labs/a05/InjectionController.java"
     },
     {
@@ -118,7 +108,6 @@
       "title": "SpEL injection — the remark is evaluated as an expression",
       "severity": "HIGH",
       "endpoints": ["POST /api/transfers/{id}/remark"],
-      "toggle": "lab.ssti",
       "fix_location": "backend/src/main/java/com/securebank/labs/a05/SstiRemarkController.java -> remark(Long, Map)"
     },
     {
@@ -129,7 +118,6 @@
       "title": "SSTI + OS command injection — read internal config and run commands",
       "severity": "HIGH",
       "endpoints": ["POST /api/report/generate", "POST /api/report/date-filter"],
-      "toggle": "lab.cmdinject",
       "fix_location": "backend/src/main/java/com/securebank/labs/a05/ReportController.java -> generate(Map) and dateFilter(Map)"
     },
     {
@@ -140,7 +128,6 @@
       "title": "Stored XSS — a transaction note is rendered as raw HTML",
       "severity": "MEDIUM",
       "endpoints": ["POST /api/transfers/send", "GET /api/transfers/html"],
-      "toggle": "lab.xss",
       "fix_location": "backend/src/main/java/com/securebank/labs/a05/NoteRenderer.java -> render(String)"
     },
     {
@@ -151,7 +138,6 @@
       "title": "Negative transfer — the amount is applied without validation",
       "severity": "MEDIUM",
       "endpoints": ["POST /api/transfers/send"],
-      "toggle": "lab.negativetransfer",
       "fix_location": "backend/src/main/java/com/securebank/labs/a06/TransferService.java -> send(Long, Long, BigDecimal, String, Long)"
     },
     {
@@ -162,7 +148,6 @@
       "title": "Mass assignment — promote yourself to admin via the profile endpoint",
       "severity": "MEDIUM",
       "endpoints": ["PATCH /api/profile"],
-      "toggle": "lab.massassign",
       "fix_location": "backend/src/main/java/com/securebank/labs/a06/ProfileController.java -> update(Map)"
     },
     {
@@ -173,7 +158,6 @@
       "title": "Account enumeration — the login error tells you if a user exists",
       "severity": "LOW",
       "endpoints": ["POST /api/auth/login"],
-      "toggle": "lab.userenum",
       "fix_location": "backend/src/main/java/com/securebank/labs/a07/AuthController.java -> failure(String)"
     },
     {
@@ -184,7 +168,6 @@
       "title": "Brute force — the login endpoint never locks the account out",
       "severity": "LOW",
       "endpoints": ["POST /api/auth/login"],
-      "toggle": "lab.bruteforce",
       "fix_location": "backend/src/main/java/com/securebank/labs/a07/LoginAttemptService.java + labs/a07/AuthController.java -> login(Map)"
     },
     {
@@ -195,7 +178,6 @@
       "title": "Session fixation — the session id survives login unchanged",
       "severity": "MEDIUM",
       "endpoints": ["POST /api/auth/login-session", "GET /api/session/whoami"],
-      "toggle": "lab.sessionfixation",
       "fix_location": "backend/src/main/java/com/securebank/labs/a07/SessionLoginController.java -> loginSession(Map, HttpServletRequest)"
     },
     {
@@ -206,7 +188,6 @@
       "title": "Predictable reset token — compute it offline from the username",
       "severity": "HIGH",
       "endpoints": ["POST /api/auth/reset-request", "POST /api/auth/reset-confirm"],
-      "toggle": "lab.resettoken",
       "fix_location": "backend/src/main/java/com/securebank/labs/a07/AuthController.java -> resetRequest(Map)"
     },
     {
@@ -217,7 +198,6 @@
       "title": "Unsafe deserialization — an upload becomes remote code execution",
       "severity": "CRITICAL",
       "endpoints": ["POST /api/integrity/import-account"],
-      "toggle": "lab.deserialization",
       "fix_location": "backend/src/main/java/com/securebank/labs/a08/IntegrityController.java -> importAccount(MultipartFile)"
     },
     {
@@ -228,7 +208,6 @@
       "title": "JWT alg:none — forge an admin token with no key at all",
       "severity": "CRITICAL",
       "endpoints": ["any authenticated endpoint (the admin API proves it best)"],
-      "toggle": "lab.jwtalgnone",
       "fix_location": "backend/src/main/java/com/securebank/security/LabJwtService.java -> parse(String)"
     },
     {
@@ -239,7 +218,6 @@
       "title": "Unrestricted file upload — your file, your name, served as HTML",
       "severity": "HIGH",
       "endpoints": ["POST /api/integrity/kyc-upload"],
-      "toggle": "lab.upload",
       "fix_location": "backend/src/main/java/com/securebank/labs/a08/IntegrityController.java -> kycUpload(MultipartFile)"
     },
     {
@@ -250,7 +228,6 @@
       "title": "Verbose error — the stack trace tells the attacker how the app works",
       "severity": "LOW",
       "endpoints": ["GET /api/transfers/account-summary?id=abc"],
-      "toggle": "lab.verboseerror",
       "fix_location": "backend/src/main/java/com/securebank/labs/a10/VerboseErrorController.java -> summary(String)"
     },
     {
@@ -261,7 +238,6 @@
       "title": "Type coercion — the error message names your classes and fields",
       "severity": "MEDIUM",
       "endpoints": ["POST /api/transfers/typed-send"],
-      "toggle": "lab.typecoercion",
       "fix_location": "backend/src/main/java/com/securebank/labs/a10/CoercionController.java -> handleUnreadable(HttpMessageNotReadableException)"
     },
     {
@@ -272,7 +248,6 @@
       "title": "Fail-open authentication — a broken token becomes an admin session",
       "severity": "CRITICAL",
       "endpoints": ["any authenticated endpoint with a malformed Bearer token"],
-      "toggle": "lab.failopen",
       "fix_location": "backend/src/main/java/com/securebank/security/LabAuthFilter.java -> doFilterInternal(...)"
     }
   ]

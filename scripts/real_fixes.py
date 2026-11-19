@@ -1,13 +1,13 @@
 """The production-shaped fix for each lab.
 
-`isolation_matrix.py` disables the vulnerable branch mechanically
-(`if (labs.isEnabled("x"))` becomes `if (labs.isEnabled("x") && false)`)
-because that is the smallest edit that proves the exploit stops working
-without disturbing anything else. That is the right thing for a test, but
-it is the wrong thing to *show a learner*.
+`isolation_matrix.py` applies each lab's fix as a text substitution and
+then rebuilds, so the fix has to be written against the source as it
+stands. The snippets there are deliberately minimal — the smallest change
+that makes the exploit stop working without disturbing anything else.
 
-This module holds the fix as it should be written: the vulnerable branch
-deleted, the real check in its place. `gen_solutions.py` prints these.
+This module holds the same fixes as they should be *written*: the
+vulnerable code replaced by the real check, in the shape you would ship.
+`gen_solutions.py` prints these.
 
 Each entry is the replacement code for the vulnerable snippet — the whole
 block, so it can be read as a diff.
@@ -124,13 +124,18 @@ server:
      * fails fast at startup if it is missing or too short — a placeholder
      * that refuses to boot is better than a real secret in git.
      */
-    public static byte[] secret(LabToggles labs) {
-        String configured = System.getenv("JWT_SECRET");
-        if (configured == null || configured.length() < 32) {
-            throw new IllegalStateException(
-                    "JWT_SECRET must be set and at least 32 characters long");
+    public static String secret() {
+        String fromEnv = System.getenv(SECRET_ENV_VAR);
+        if (fromEnv != null && !fromEnv.isBlank()) {
+            return fromEnv;
         }
-        return configured.getBytes(StandardCharsets.UTF_8);
+        String fromProperty = System.getProperty(SECRET_PROPERTY);
+        if (fromProperty != null && !fromProperty.isBlank()) {
+            return fromProperty;
+        }
+        // No secret configured — a random one for the lifetime of the
+        // process. A real deployment should fail to start instead.
+        return fallbackSecret;
     }"""),
     9: ("""        // Mask what the caller does not need, and keep the full value out
         // of the log line.
@@ -155,33 +160,27 @@ server:
         context.setVariable("remark", remark);
         String rendered = parser.parseExpression("#remark").getValue(context, String.class);"""),
     12: ("""    // The report template is a constant, and the account id is a variable.
-    private Map<String, Object> generateFixed(Map<String, String> body) {
+    private String renderTemplateFixed(String accountId) {
         StandardEvaluationContext context = new StandardEvaluationContext();
-        context.setVariable("accountId", body.get("account_id"));
-        String report = parser.parseExpression(
+        context.setVariable("accountId", accountId);
+        return parser.parseExpression(
                         "'Statement for account ' + #accountId + ' — balance 4200.00 GBP'")
                 .getValue(context, String.class);
-        Map<String, Object> out = new LinkedHashMap<>();
-        out.put("account_id", body.get("account_id"));
-        out.put("report", report);
-        return out;
     }
 
     // The date filter never builds a command line. The arguments are a
     // list, so there is no shell to break out of.
-    private Map<String, Object> dateFilterFixed(Map<String, String> body) {
-        String from = body.get("from_date");
-        String to = body.get("to_date");
-
-        ProcessBuilder builder = new ProcessBuilder("date", "-d", from);
-        builder.redirectErrorStream(true);
-        String output = runAndCapture(builder);
-
-        Map<String, Object> out = new LinkedHashMap<>();
-        out.put("from_date", from);
-        out.put("to_date", to);
-        out.put("output", output);
-        return out;
+    private String runCommand(List<String> command) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(command);
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+            String output = read(process);
+            process.waitFor(10, TimeUnit.SECONDS);
+            return output.trim();
+        } catch (IOException | InterruptedException e) {
+            return "command failed: " + e.getMessage();
+        }
     }"""),
     13: ("""    public String render(String note) {
         // Escaped at the point of output, so the API can never serve a
