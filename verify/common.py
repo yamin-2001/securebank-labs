@@ -33,7 +33,9 @@ CUSTOMERS = {
     "carol": "letmein",
     "dave": "changeme",
 }
-ADMIN = ("admin", "admin")
+# LAB 5 (A02): the admin's password has been rotated away from the shipped
+# default, so `admin / admin` no longer authenticates.
+ADMIN = ("admin", "S3cure-Admin-Passw0rd!")
 
 TIMEOUT = 10
 

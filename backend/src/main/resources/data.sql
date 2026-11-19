@@ -2,9 +2,18 @@
 --
 -- Idempotent: re-running on every boot restores a wrecked database.
 --
--- LAB 7 (A04 — Cryptographic Failures): the SHIPPED seed stores passwords
+-- LAB 7 (A04 — Cryptographic Failures): the seed stores passwords
 -- as UNSALTED MD5. The hashes below must match
 -- core/PasswordHasher.md5Hex(...) exactly.
+--
+-- LAB 5 (A02 — Security Misconfiguration): the admin's stored hash has been
+-- ROTATED. It used to be md5("admin"), which is what made the shipped
+-- default credentials work. It is now md5 of a password that is not written
+-- down here:
+--
+--     S3cure-Admin-Passw0rd!
+--
+-- so `admin / admin` no longer authenticates against the operations console.
 --
 -- THE FIX for Lab 7 is to replace this block with salted hashes. Generate
 -- a replacement with:
@@ -18,7 +27,7 @@
 
 INSERT INTO users (id, username, password_hash, email, full_name, role)
 VALUES
-    (1, 'admin', '21232f297a57a5a743894a0e4a801fc3', 'admin@bank.com', 'Site Administrator', 'admin'),
+    (1, 'admin', 'ae0d1ff81cdd468f1c801231da8b2e3f', 'admin@bank.com', 'Site Administrator', 'admin'),
     (2, 'alice', '482c811da5d5b4bc6d497ffa98491e38', 'alice@bank.com', 'Alice Anderson',     'customer'),
     (3, 'bob',   'd8578edf8458ce06fbc5bb76a58c5ca4', 'bob@bank.com',   'Bob Brown',          'customer'),
     (4, 'carol', '0d107d09f5bbe40cade3de5c71e9e9b7', 'carol@bank.com', 'Carol Clark',        'customer'),

@@ -9,7 +9,9 @@ const SEED_USERS = [
   { username: 'alice', password: 'password123', role: 'customer' },
   { username: 'bob', password: 'qwerty', role: 'customer' },
   { username: 'carol', password: 'letmein', role: 'customer' },
-  { username: 'admin', password: 'admin', role: 'admin' },
+  // LAB 5 (fixed): the admin's password has been rotated away from the
+  // shipped default, so `admin / admin` no longer signs in.
+  { username: 'admin', password: 'S3cure-Admin-Passw0rd!', role: 'admin' },
 ]
 
 export default function LoginPage({ onLoggedIn }: Props) {
