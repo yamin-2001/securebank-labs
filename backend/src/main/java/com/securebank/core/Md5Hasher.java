@@ -9,21 +9,26 @@ import org.springframework.stereotype.Component;
 /**
  * Unsalted MD5 hashing.
  *
- * <p><strong>LAB 7 (A04 — Cryptographic Failures).</strong> This class exists
- * because the lab needs real MD5 hashes to crack, and real unsalted MD5
- * password storage to attack. It is NOT a real password hashing strategy.
+ * <p><strong>LAB 7 (A04 — Cryptographic Failures).</strong>
  *
- * <p><strong>FIX:</strong> replace every use of this class with
- * {@code BCryptPasswordEncoder} (or Argon2). The seeded rows in
- * {@code data.sql} carry MD5 hashes; the fix must re-seed or migrate them.
- * Note that fixing Lab 7 does not fix Lab 10 — the SQL comment in the
+ * <p><strong>FIXED.</strong> This class used to be the storage scheme for
+ * every seeded password. It is no longer: passwords are stored as
+ * PBKDF2-HMAC-SHA256 with a per-user salt, and the seeded rows in
+ * {@code data.sql} have been re-seeded to match.
+ *
+ * <p>What is left here is the legacy verifier — the piece that lets a
+ * database hold a mix of old and new hashes while you migrate the remaining
+ * rows, re-hashing each one on its owner's next successful login. It is not
+ * a storage strategy and nothing should write a hash with it.
+ *
+ * <p>Note: fixing Lab 7 does not fix Lab 10 — the SQL comment in the
  * login-bypass payload removes the password predicate entirely, so the
  * injection still works regardless of the hashing algorithm.
  */
 @Component
 public class Md5Hasher {
 
-    /** LAB 7: unsalted MD5. Trivially crackable, rainbow-tabled in seconds. */
+    /** Legacy unsalted MD5. Trivially crackable, rainbow-tabled in seconds. */
     public String hex(String input) {
         try {
             MessageDigest digest = MessageDigest.getInstance("MD5");
