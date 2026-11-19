@@ -4,7 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.Base64;
 import java.util.List;
+
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
 
 import org.junit.jupiter.api.Test;
 
@@ -16,9 +20,12 @@ import org.junit.jupiter.api.Test;
  * (a 401 on a correct password) looks nothing like its cause. This test
  * fails loudly instead.
  *
- * <p>It also pins the shape of the hash format, because Lab 7's fix depends
- * on it: the legacy rows are unsalted MD5, and the fixed rows are
- * {@code pbkdf2-sha256$<iterations>$<salt>$<hash>}.
+ * <p><strong>LAB 7 (FIXED):</strong> the seeded rows are salted
+ * PBKDF2-HMAC-SHA256, so this test derives the hash the same way
+ * {@code PasswordHasher} does and checks the stored value against it.
+ * The salt is the base64 <em>text</em>, encoded as UTF-8 bytes — not the
+ * bytes it decodes to — which is what {@code PBEKeySpec} does with a char
+ * array.
  */
 class SeedIntegrityTest {
 
@@ -59,24 +66,93 @@ class SeedIntegrityTest {
         }
     }
 
+    /** Derive the hash the way PasswordHasher.pbkdf2() does. */
+    private static String pbkdf2Hex(String password, String saltBase64, int iterations) {
+        try {
+            PBEKeySpec spec = new PBEKeySpec(
+                    password.toCharArray(),
+                    saltBase64.getBytes(StandardCharsets.UTF_8),
+                    iterations, 256);
+            SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+            return Base64.getEncoder().encodeToString(factory.generateSecret(spec).getEncoded());
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** Pull the stored hash out of a seed row. */
+    private static String storedHash(String row) {
+        int start = row.indexOf("', '");
+        // The hash is the third comma-separated field, after id and username.
+        int firstComma = row.indexOf(',');
+        int secondComma = row.indexOf(',', firstComma + 1);
+        int thirdComma = row.indexOf(',', secondComma + 1);
+        String field = row.substring(secondComma + 1, thirdComma).trim();
+        return field.startsWith("'") && field.endsWith("'")
+                ? field.substring(1, field.length() - 1)
+                : field;
+    }
+
     @Test
     void everySeededHashIsTheHashOfItsPassword() {
-        String text = seedText();
-        for (String[] user : SEED_USERS) {
-            String id = user[0];
+        List<String> rows = userRows();
+        assertThat(rows).hasSize(SEED_USERS.size());
+
+        for (int i = 0; i < SEED_USERS.size(); i++) {
+            String[] user = SEED_USERS.get(i);
             String username = user[1];
             String password = user[2];
 
-            String row = text.lines()
-                    .filter(line -> line.strip().startsWith("(" + id + ", '" + username + "',"))
-                    .findFirst()
-                    .orElseThrow(() -> new AssertionError(
-                            "no seed row for " + username + " in data.sql"));
+            String stored = storedHash(rows.get(i));
+            assertThat(stored)
+                    .as("%s's seeded hash must use the PBKDF2 format", username)
+                    .startsWith("pbkdf2-sha256$");
 
-            String expected = md5Hex(password);
-            assertThat(row)
-                    .as("%s's seeded hash must be md5(%s)", username, password)
-                    .contains("'" + expected + "'");
+            String[] parts = stored.split("\\$");
+            assertThat(parts).as("%s's seeded hash must have four parts", username).hasSize(4);
+            int iterations = Integer.parseInt(parts[1]);
+            String salt = parts[2];
+            String expected = pbkdf2Hex(password, salt, iterations);
+
+            assertThat(stored)
+                    .as("%s's seeded hash must be pbkdf2(%s, its own salt)", username, password)
+                    .isEqualTo("pbkdf2-sha256$" + iterations + "$" + salt + "$" + expected);
+        }
+    }
+
+    /** The user rows in data.sql — the ones that carry a password hash. */
+    private static List<String> userRows() {
+        String text = seedText();
+        return SEED_USERS.stream()
+                .map(user -> text.lines()
+                        .filter(line -> line.strip().startsWith("(" + user[0] + ", '" + user[1] + "',"))
+                        .findFirst()
+                        .orElseThrow(() -> new AssertionError(
+                                "no seed row for " + user[1] + " in data.sql")))
+                .toList();
+    }
+
+    @Test
+    void everySeededHashHasItsOwnSalt() {
+        // An unsalted scheme is Lab 7's bug. Two users with the same password
+        // must not produce the same stored hash.
+        List<String> salts = userRows().stream()
+                .map(SeedIntegrityTest::storedHash)
+                .map(hash -> hash.split("\\$")[2])
+                .toList();
+        assertThat(salts).hasSize(5);
+        assertThat(salts).doesNotHaveDuplicates();
+    }
+
+    @Test
+    void noSeededRowUsesUnsaltedMd5() {
+        // The legacy MD5 format is still readable, so a stray MD5 row would
+        // keep working — and would keep being crackable.
+        for (String row : userRows()) {
+            String stored = storedHash(row);
+            assertThat(stored)
+                    .as("every seeded row must use PBKDF2, found: %s", stored)
+                    .startsWith("pbkdf2-sha256$");
         }
     }
 

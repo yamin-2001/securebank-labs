@@ -2,36 +2,30 @@
 --
 -- Idempotent: re-running on every boot restores a wrecked database.
 --
--- LAB 7 (A04 — Cryptographic Failures): the seed stores passwords
--- as UNSALTED MD5. The hashes below must match
--- core/PasswordHasher.md5Hex(...) exactly.
+-- LAB 7 (A04 — Cryptographic Failures): the seed stores passwords as
+-- PBKDF2-HMAC-SHA256 with a per-user random salt. The format is:
+--     pbkdf2-sha256$<iterations>$<salt-b64>$<hash-b64>
+-- and the rows below match core/PasswordHasher.pbkdf2(...) exactly.
+-- Generate a replacement with:
+--     python3 verify/payloads/hash_passwords.py
 --
--- LAB 5 (A02 — Security Misconfiguration): the admin's stored hash has been
--- ROTATED. It used to be md5("admin"), which is what made the shipped
--- default credentials work. It is now md5 of a password that is not written
--- down here:
+-- PasswordHasher.matches() accepts BOTH formats, so any remaining MD5 rows
+-- keep working while you migrate them. Keep the DO UPDATE so a fixed seed
+-- actually replaces the vulnerable rows on the next boot.
+--
+-- LAB 5 (A02 — Security Misconfiguration): the admin's password has been
+-- ROTATED away from the shipped default, so `admin / admin` no longer
+-- authenticates against the operations console. It is:
 --
 --     S3cure-Admin-Passw0rd!
---
--- so `admin / admin` no longer authenticates against the operations console.
---
--- THE FIX for Lab 7 is to replace this block with salted hashes. Generate
--- a replacement with:
---     python3 verify/payloads/hash_passwords.py
--- The format is:
---     pbkdf2-sha256$<iterations>$<salt-b64>$<hash-b64>
---
--- PasswordHasher.matches() accepts BOTH formats, so the MD5 rows keep
--- working while you migrate. Keep the DO UPDATE so a fixed seed actually
--- replaces the vulnerable rows on the next boot.
 
 INSERT INTO users (id, username, password_hash, email, full_name, role)
 VALUES
-    (1, 'admin', 'ae0d1ff81cdd468f1c801231da8b2e3f', 'admin@bank.com', 'Site Administrator', 'admin'),
-    (2, 'alice', '482c811da5d5b4bc6d497ffa98491e38', 'alice@bank.com', 'Alice Anderson',     'customer'),
-    (3, 'bob',   'd8578edf8458ce06fbc5bb76a58c5ca4', 'bob@bank.com',   'Bob Brown',          'customer'),
-    (4, 'carol', '0d107d09f5bbe40cade3de5c71e9e9b7', 'carol@bank.com', 'Carol Clark',        'customer'),
-    (5, 'dave',  '4cb9c8a8048fd02294477fcb1a41191a', 'dave@bank.com',  'Dave Davis',         'customer')
+    (1, 'admin', 'pbkdf2-sha256$100000$aiqDOnKwABVvMfmWwLhHcg==$BzaM/gbvOPYM0I6+Bv2bPC3ch7kXWXcQNvi/gapDMEM=', 'admin@bank.com', 'Site Administrator', 'admin'),
+    (2, 'alice', 'pbkdf2-sha256$100000$XJ9Ii6KTdr4lUI/0TPsCuA==$D0ObSvEvCCYrbuYciro2y9VryTGSKKx4v+btNtJBu+0=', 'alice@bank.com', 'Alice Anderson',     'customer'),
+    (3, 'bob',   'pbkdf2-sha256$100000$XAUVTFFdsB9CIEjzAL5B1A==$a8Qb/YzfXULYVJfUjzZS0TNgsmksdpm6Nmxn8VYxOqg=', 'bob@bank.com',   'Bob Brown',          'customer'),
+    (4, 'carol', 'pbkdf2-sha256$100000$tEhTL9ce1tQO9HLp7hSJyg==$ax9NtR8NNO9e4ezUruIHd5bLp/k3mn9CF4Q0Pn6zdMI=', 'carol@bank.com', 'Carol Clark',        'customer'),
+    (5, 'dave',  'pbkdf2-sha256$100000$Cnsa2bTQMt30J/HAcHDTbQ==$LGZh8OWYBsrXy48j7aIG7C0cKEIj18jzBu266yEJlSU=', 'dave@bank.com',  'Dave Davis',         'customer')
 ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash;
 
 -- Lab 15 (mass assignment) lets a customer promote themselves, which

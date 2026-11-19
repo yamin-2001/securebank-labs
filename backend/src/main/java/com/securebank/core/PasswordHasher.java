@@ -14,15 +14,16 @@ import org.springframework.stereotype.Component;
 /**
  * Password hashing.
  *
- * <p><strong>LAB 7 (A04 — Cryptographic Failures).</strong> While the
- * {@code md5hash} lab is armed, this class hashes with unsalted MD5 — the
- * scheme the seeded rows in {@code data.sql} use. Once the lab is disarmed
- * it hashes with PBKDF2-HMAC-SHA256 and a per-user random salt.
+ * <p><strong>LAB 7 (A04 — Cryptographic Failures).</strong>
  *
- * <p><strong>FIX:</strong> replace the MD5 branch with an adaptive
- * password hash (BCrypt, Argon2, or scrypt) and re-seed or migrate the
- * existing rows. See {@link #matches(String, String)} — it already accepts
- * both formats, so the seeded rows keep working while you migrate.
+ * <p><strong>FIXED.</strong> This class used to hash with unsalted MD5
+ * while the {@code md5hash} lab was armed. It now always hashes with
+ * PBKDF2-HMAC-SHA256 and a per-user random salt, and the seeded rows in
+ * {@code data.sql} have been re-seeded to match.
+ *
+ * <p>{@link #matches(String, String)} still accepts the legacy MD5 format,
+ * so a database can hold a mix of old and new hashes while you migrate the
+ * remaining rows. Re-hash on successful login.
  *
  * <p>Note: fixing this does <strong>not</strong> fix Lab 10. The SQL comment
  * in the login-bypass payload removes the password predicate entirely, so
@@ -31,22 +32,17 @@ import org.springframework.stereotype.Component;
 @Component
 public class PasswordHasher {
 
-    private final LabToggles labs;
-
-    public PasswordHasher(LabToggles labs) {
-        this.labs = labs;
+    public PasswordHasher() {
     }
 
     /**
      * Hash a password.
      *
-     * <p>LAB 7 (VULNERABLE): unsalted MD5. FIX: use BCrypt or Argon2.
+     * <p><strong>LAB 7 (FIXED):</strong> PBKDF2-HMAC-SHA256 with a fresh
+     * random salt per password. The MD5 branch is gone — unsalted MD5 is a
+     * rainbow table lookup, not password hashing.
      */
     public String hash(String password) {
-        if (labs.isEnabled("md5hash")) {
-            return md5Hex(password == null ? "" : password);
-        }
-        // FIXED: PBKDF2-HMAC-SHA256 with a fresh random salt per password.
         String salt = randomSalt();
         return pbkdf2(password == null ? "" : password, salt);
     }
