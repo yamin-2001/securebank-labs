@@ -27,7 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>Home to four labs, each with its own fix location and its own toggle:
  * <ul>
  *   <li><strong>LAB 10 (FIXED)</strong> (A05) — SQL injection / login bypass</li>
- *   <li><strong>LAB 16</strong> (A06) — account enumeration via error messages</li>
+ *   <li><strong>LAB 16 (FIXED)</strong> (A06) — account enumeration via error messages</li>
  *   <li><strong>LAB 17</strong> (A07) — no rate limiting</li>
  *   <li><strong>LAB 19</strong> (A07) — predictable password reset token</li>
  * </ul>
@@ -98,24 +98,18 @@ public class AuthController {
     }
 
     /**
-     * LAB 16 (VULNERABLE): the error message reveals whether the username
-     * exists — "User not found" versus "Incorrect password".
+     * A failed login.
      *
-     * <p>FIX: return one indistinguishable message for both cases, and
-     * equalise the response time.
+     * <p><strong>LAB 16 (FIXED):</strong> the response is the same whether
+     * the username exists or the password was wrong. The old code returned
+     * "User not found" versus "Incorrect password", which told an attacker
+     * which usernames are real.
      */
     private ResponseEntity<Map<String, Object>> failure(String username) {
-        // LAB 17: a failed attempt should count towards the account's budget.
-        //
-        // FIX: attempts.recordFailure(username);
-        Map<String, Object> body = new LinkedHashMap<>();
-        if (labs.isEnabled("userenum")) {
-            boolean exists = users.findByUsername(username).isPresent();
-            body.put("error", exists ? "Incorrect password" : "User not found");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
-        }
+        // LAB 17: a failed attempt counts towards the account's budget.
+        attempts.recordFailure(username);
 
-        // FIXED: the same message either way.
+        Map<String, Object> body = new LinkedHashMap<>();
         body.put("error", "Invalid credentials");
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
     }
@@ -147,9 +141,9 @@ public class AuthController {
     }
 
     private ResponseEntity<Map<String, Object>> success(User user) {
-        // LAB 17: a successful login should clear the account's counter.
-        //
-        // FIX: attempts.recordSuccess(user.getUsername());
+        // LAB 17: a successful login clears the account's counter.
+        attempts.recordSuccess(user.getUsername());
+
         String token = jwt.issue(user.getId(), user.getUsername(), user.getRole());
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("token", token);
