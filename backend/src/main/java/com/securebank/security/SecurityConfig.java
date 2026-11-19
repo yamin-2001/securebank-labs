@@ -27,8 +27,10 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  *   <tr><td>CSRF</td><td>bearer-token API; not one of the 25 labs</td><td>—</td></tr>
  *   <tr><td>Default 302 entry point</td><td>replaced with a 401 JSON body</td><td>—</td></tr>
  *   <tr><td>Session fixation protection</td><td>the session id must NOT rotate</td><td>18</td></tr>
- *   <tr><td>{@code /api/admin/**} role check</td><td>the missing role check IS the bug</td><td>2</td></tr>
  * </table>
+ *
+ * <p>Lab 2 (the missing {@code /api/admin/**} role check) no longer appears
+ * here — that check is in place.
  *
  * <p>Note on JWT parsing: Spring Security's own JWT support
  * ({@code NimbusJwtDecoder}) rejects {@code alg:none} outright. We do not use
@@ -84,12 +86,10 @@ public class SecurityConfig {
                                 // fixed independently.
                                 "/admin-panel/**")
                         .permitAll()
-                        // LAB 2 (VULNERABLE): authenticated, but NO role check.
-                        //
-                        // FIX: change `.authenticated()` to `.hasRole("ADMIN")`.
-                        // A regular customer can currently read every user in
-                        // the system, including hashed passwords.
-                        .requestMatchers("/api/admin/**").authenticated()
+                        // LAB 2 (FIXED): the admin API requires the ADMIN role.
+                        // A regular customer gets a 403 rather than a listing
+                        // of every user in the system.
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex
                         // Return a 401 JSON body rather than Spring's default
