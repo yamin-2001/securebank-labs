@@ -21,8 +21,7 @@ import org.springframework.mock.env.MockEnvironment;
  * to break by accident. These tests pin the behaviour each of them needs:
  *
  * <ul>
- *   <li>Lab 21: the vulnerable parser accepts an {@code alg:none} token; the
- *       fixed one does not.</li>
+ *   <li>Lab 21: the parser rejects an {@code alg:none} token.</li>
  *   <li>Lab 25: a token that names no user parses successfully — the
  *       fail-open is in the filter, not the parser, so the two fixes stay
  *       independent.</li>
@@ -66,10 +65,13 @@ class JwtLabTest {
     }
 
     @Test
-    void lab21TheVulnerableParserAcceptsAnAlgNoneToken() {
+    void lab21TheParserRejectsAnAlgNoneToken() {
+        // LAB 21 (FIXED): the parser checks the algorithm and verifies the
+        // signature, so an alg:none token is rejected whichever way the lab
+        // toggle is set. There is no code path left that accepts one.
         LabJwtService jwt = service(true);
-        Claims claims = jwt.parse(algNoneToken(Map.of("user_id", 1L, "role", "admin")));
-        assertThat(claims.get("role", String.class)).isEqualTo("admin");
+        assertThatThrownBy(() -> jwt.parse(algNoneToken(Map.of("user_id", 1L, "role", "admin"))))
+                .isInstanceOf(io.jsonwebtoken.JwtException.class);
     }
 
     @Test
