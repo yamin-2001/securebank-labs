@@ -136,18 +136,18 @@ public class SecurityConfig {
     }
 
     /**
-     * The UI chain: static resources, the Lab 6 files, and uploads.
+     * The UI chain: static resources and uploads.
      *
-     * <p>These are deliberately public — Lab 6 needs {@code /.env},
-     * {@code /.git/config} and {@code /backup.zip} to be downloadable, and
-     * Lab 22 needs uploaded files to be fetchable.
+     * <p>These are public. Lab 6's sensitive files (Lab 6) are no longer
+     * here — they have been taken off the web root — and Lab 22 needs
+     * uploaded files to be fetchable.
      */
     @Bean
     @Order(3)
     public SecurityFilterChain uiChain(HttpSecurity http) throws Exception {
         http
                 .securityMatcher("/", "/index.html", "/app.js", "/style.css", "/favicon.ico",
-                        "/labs.json", "/.env", "/.git/config", "/backup.zip", "/uploads/**")
+                        "/labs.json", "/uploads/**")
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(jsonEntryPoint()))
