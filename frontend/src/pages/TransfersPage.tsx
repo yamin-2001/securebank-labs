@@ -13,15 +13,13 @@ interface Transfer {
 /**
  * The transfers page.
  *
- * LAB 13 (stored XSS): the note is injected with `dangerouslySetInnerHTML`.
- * That is deliberate — it matches the original lab and it is the render
- * path the fix has to cover.
+ * LAB 13 (stored XSS) is fixed: the note is rendered as plain text.
  *
  * Note that this page renders the note itself; it does not go through the
  * server-side `NoteRenderer`. The API's `/api/transfers/html` endpoint uses
- * that renderer, so the two are *separate* render paths: escaping in
- * `NoteRenderer` fixes the API but leaves this page injectable. The fix
- * for this lab has to cover both.
+ * that renderer, so the two are *separate* render paths. The fix for this
+ * lab has to cover both, and it does: `NoteRenderer` escapes the note and
+ * this page never hands it to the HTML parser at all.
  */
 export default function TransfersPage() {
   const [transfers, setTransfers] = useState<Transfer[]>([])
@@ -154,15 +152,11 @@ export default function TransfersPage() {
                 {t.note && (
                   <div className="mt-1 text-xs text-slate-300">
                     {/*
-                      LAB 13: the note is rendered as raw HTML on purpose.
-                      The server-side renderer (NoteRenderer) is the fix
-                      location; when it escapes the note, this shows the
-                      escaped text instead of live markup.
+                      LAB 13 (fixed): the note is rendered as plain text.
+                      React escapes it, so markup in the note shows up as
+                      text instead of live markup.
                     */}
-                    <div
-                      className="txn-note"
-                      dangerouslySetInnerHTML={{ __html: t.note }}
-                    />
+                    <div className="txn-note">{t.note}</div>
                   </div>
                 )}
               </div>
