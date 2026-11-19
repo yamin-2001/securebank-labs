@@ -3,7 +3,6 @@ package com.securebank.security;
 import java.io.IOException;
 import java.util.List;
 
-import com.securebank.core.LabToggles;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
@@ -18,19 +17,20 @@ import org.springframework.web.filter.OncePerRequestFilter;
 /**
  * Authenticates requests from a {@code Bearer} token.
  *
- * <p><strong>LAB 25 (A10 — Mishandling of Exceptional Conditions).</strong>
- * The filter's job is to establish an identity from a token. When it cannot,
- * the failure is swallowed and the request continues with a <em>default
- * identity</em> of {@code user_id = 1} — which is the admin user. A
- * deliberately malformed token therefore grants admin access.
+ * <p><strong>LAB 25 (A10 — Mishandling of Exceptional Conditions).
+ * <strong>FIXED.</strong> The filter's job is to establish an identity from
+ * a token. It used to be that when it could not, the failure was swallowed
+ * and the request continued with a <em>default identity</em> of
+ * {@code user_id = 1} — which is the admin user. A deliberately malformed
+ * token therefore granted admin access.
  *
- * <p>The default identity is the most dangerous possible value: it looks
- * like a defensive fallback but is actually a privilege escalation. A
+ * <p>The default identity was the most dangerous possible value: it looked
+ * like a defensive fallback but was actually a privilege escalation. A
  * fallback that assumes "the admin" when you cannot prove who the caller
  * is, is not a fallback at all.
  *
- * <p><strong>FIX:</strong> never fail open. If the token cannot be turned
- * into an identity, the request is unauthenticated — return 401.
+ * <p>The filter now never fails open. If the token cannot be turned into an
+ * identity, the request is unauthenticated — 401.
  *
  * <p><strong>How this stays independent of Lab 21:</strong> the fail-open
  * branch is reached when the token was <em>accepted but named no
@@ -42,11 +42,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class LabAuthFilter extends OncePerRequestFilter {
 
     private final LabJwtService jwt;
-    private final LabToggles labs;
 
-    public LabAuthFilter(LabJwtService jwt, LabToggles labs) {
+    public LabAuthFilter(LabJwtService jwt) {
         this.jwt = jwt;
-        this.labs = labs;
     }
 
     @Override
@@ -84,19 +82,17 @@ public class LabAuthFilter extends OncePerRequestFilter {
             }
         }
 
-        // LAB 25: the dangerous default identity. user_id 1 is the admin user.
-        // Only reachable while the failopen lab is armed.
+        // LAB 25 (FIXED): a token that was accepted but named no identity is
+        // an unauthenticated request, not an admin one.
         //
-        // The trigger is "the token was accepted, but it did not name an
-        // identity" — a token with no user_id claim, or one for a user that
-        // no longer exists. The parser succeeded, so this does not depend on
-        // which parser ran: Lab 21's fix (switching to jjwt) leaves this
-        // branch exactly as it is.
-        if (userId == null && labs.isEnabled("failopen")
-                && header != null && header.startsWith("Bearer ")) {
-            userId = 1L;
-            role = "admin";
-            username = "admin";
+        // The old code fell back to a default identity of user_id 1 — the
+        // admin user — so a token with no user_id claim was silently
+        // promoted. A fallback that assumes "the admin" when you cannot
+        // prove who the caller is is not a fallback at all; it is a
+        // privilege escalation.
+        if (userId == null && header != null && header.startsWith("Bearer ")) {
+            unauthorized(res);
+            return;
         }
 
         if (userId != null) {

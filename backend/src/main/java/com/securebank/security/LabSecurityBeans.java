@@ -21,7 +21,7 @@ public class LabSecurityBeans {
     }
 
     @Bean
-    public LabAuthFilter labAuthFilter(LabJwtService jwt, LabToggles labs) {
-        return new LabAuthFilter(jwt, labs);
+    public LabAuthFilter labAuthFilter(LabJwtService jwt) {
+        return new LabAuthFilter(jwt);
     }
 }
