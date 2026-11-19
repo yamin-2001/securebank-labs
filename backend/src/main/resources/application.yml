@@ -39,14 +39,15 @@ server:
   port: 8080
   error:
     # LAB 4 (A02) + LAB 23 (A10): verbose errors.
-    # These are deliberately weakened. Lab 23's fix is to set them to `never`
-    # and add input validation; Lab 4's fix additionally stops the exception
-    # message from embedding the JWT secret and the JDBC URL.
-    include-stacktrace: always
-    include-message: always
-    include-exception: always
-    include-binding-errors: always
-    include-path: always
+    # FIXED: the error pages carry no internals. A stack trace, the
+    # exception type or the message can all name the framework version, the
+    # application's class names and — when the message embeds them — the
+    # JWT secret and the database credentials.
+    include-stacktrace: never
+    include-message: never
+    include-exception: never
+    include-binding-errors: never
+    include-path: never
 
 management:
   endpoints:
