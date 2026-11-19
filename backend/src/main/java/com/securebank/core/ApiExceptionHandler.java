@@ -36,6 +36,24 @@ public class ApiExceptionHandler {
     }
 
     /**
+     * A request for a static resource that does not exist.
+     *
+     * <p><strong>LAB 6 (FIXED):</strong> with the sensitive files taken off
+     * the web root, a request for one of them is simply a missing file. It
+     * answers 404 with a short message — no stack trace, no class names.
+     *
+     * <p>Without this the {@code NoResourceFoundException} falls through to
+     * the generic handler below and the client is handed a rendered trace
+     * for a request that was nothing more than a 404.
+     */
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleNoResource(
+            org.springframework.web.servlet.resource.NoResourceFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("error", "Not found"));
+    }
+
+    /**
      * LAB 23 (VULNERABLE): the generic handler leaks the stack trace,
      * the exception type and the message.
      *

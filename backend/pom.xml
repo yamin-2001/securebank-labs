@@ -98,26 +98,13 @@
                 <directory>src/main/resources</directory>
                 <filtering>false</filtering>
                 <excludes>
-                    <!-- dot-directories are excluded by default -->
+                    <!-- LAB 6 (FIXED): dot-directories are excluded, and
+                         nothing re-adds them. The build must never copy a
+                         .git directory into the web root — a deployment that
+                         copies the whole tree leaks .git/config the same
+                         way. -->
                     <exclude>.git/**</exclude>
                 </excludes>
-            </resource>
-            <!-- LAB 6: re-add the .git directory that the default exclude drops.
-                 A real deployment copies the whole tree, so .git/config leaks
-                 into the web root there too.
-
-                 The source directory is named `git-config-fixture` rather than
-                 `.git`, because git treats a nested `.git` directory as a
-                 submodule boundary and refuses to track its contents — the
-                 fixture would be lost on every fresh clone. The build
-                 renames it back to `.git` on the way into the web root. -->
-            <resource>
-                <directory>src/main/resources/static/git-config-fixture</directory>
-                <targetPath>static/.git</targetPath>
-                <filtering>false</filtering>
-                <includes>
-                    <include>**</include>
-                </includes>
             </resource>
         </resources>
         <plugins>
