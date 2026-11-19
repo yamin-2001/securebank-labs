@@ -1,7 +1,7 @@
 """Shared helpers for the SecureBank verification harness.
 
 The harness observes HTTP behaviour only. It never reads application source
-and never inspects the lab toggles — a lab counts as fixed only when the
+and never inspects the application's configuration — a lab counts as fixed only when the
 exploit demonstrably stops working.
 """
 
