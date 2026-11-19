@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.Map;
 
 import com.securebank.core.AuthContext;
-import com.securebank.core.LabToggles;
 import com.securebank.core.PasswordHasher;
 import com.securebank.domain.User;
 import com.securebank.domain.repo.UserRepository;
@@ -19,8 +18,10 @@ import org.springframework.web.bind.annotation.RestController;
  * Cryptography-related endpoints. Home of two A04 labs:
  *
  * <ul>
- *   <li><strong>LAB 7</strong> — unsalted MD5 password hashes.</li>
- *   <li><strong>LAB 9</strong> — PII in cleartext responses and in logs.</li>
+ *   <li><strong>LAB 7 (FIXED)</strong> — passwords are stored as salted
+ *       PBKDF2-HMAC-SHA256, not unsalted MD5.</li>
+ *   <li><strong>LAB 9 (FIXED)</strong> — PII is masked in the response and
+ *       never written to the log.</li>
  * </ul>
  *
  * <p>Each lives in its own method so fixing one does not touch the other.
@@ -32,26 +33,21 @@ public class CryptoLeakController {
     private static final Logger log = LoggerFactory.getLogger(CryptoLeakController.class);
 
     private final UserRepository users;
-    private final LabToggles labs;
     private final PasswordHasher passwords;
 
-    public CryptoLeakController(UserRepository users, LabToggles labs, PasswordHasher passwords) {
+    public CryptoLeakController(UserRepository users, PasswordHasher passwords) {
         this.users = users;
-        this.labs = labs;
         this.passwords = passwords;
     }
 
     /**
-     * <strong>LAB 7 (VULNERABLE):</strong> every user's password hash, in the
-     * clear, with no salt.
+     * <strong>LAB 7 (FIXED):</strong> every user's password hash, in the
+     * clear.
      *
-     * <p>Unsalted MD5 is not password hashing — it is a rainbow table
-     * lookup. Every hash below is in the public CrackStation database.
-     *
-     * <p><strong>FIX:</strong> replace the storage scheme, not just this
-     * endpoint. Store BCrypt/Argon2 hashes with a per-user salt, re-seed or
-     * migrate the existing rows, and never hand hashes to a client at all —
-     * an admin view should show a hash <em>prefix</em> at most.
+     * <p>The hashes are salted PBKDF2-HMAC-SHA256 now, so they are not a
+     * rainbow table lookup any more. They should still not be handed to a
+     * client at all — an admin view should show a hash <em>prefix</em> at
+     * most, and no endpoint should expose a credential.
      *
      * <p>Note: fixing this does <strong>not</strong> fix Lab 10. The SQL
      * comment in the login-bypass payload removes the password predicate
@@ -75,13 +71,10 @@ public class CryptoLeakController {
     }
 
     /**
-     * <strong>LAB 9 (VULNERABLE):</strong> the caller's full profile — full
-     * name, email, unmasked account number, sort code and balance — returned
-     * in plaintext and written to the application log.
-     *
-     * <p><strong>FIX:</strong> mask the sensitive fields
-     * ({@code ACC-****1001}, {@code 20-**-**}) and never log PII. Log the
-     * user id, not the profile.
+     * <strong>LAB 9 (FIXED):</strong> the sensitive fields are masked
+     * ({@code ACC-****1001}, {@code 20-**-**}), the balance is not returned
+     * at all, and nothing containing PII is written to the log. The log line
+     * carries the user id and nothing else.
      */
     @GetMapping("/profile")
     public Map<String, Object> profile() {
@@ -94,31 +87,14 @@ public class CryptoLeakController {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("user_id", user.getId());
         body.put("username", user.getUsername());
-        body.put("full_name", user.getFullName());
-        body.put("email", user.getEmail());
-        body.put("account_number", "ACC-1001");
-        body.put("sort_code", "20-00-00");
-        body.put("balance", 4200.00);
-        body.put("currency", "GBP");
-
-        if (labs.isEnabled("pii")) {
-            // LAB 9 (VULNERABLE): the unmasked profile is written to stdout,
-            // where it will sit in the log files for years.
-            //
-            // FIX: delete this log line, and mask the fields above.
-            log.info("profile lookup for user {}: name={} email={} account={} "
-                            + "sort_code={} balance={}",
-                    user.getId(), user.getFullName(), user.getEmail(),
-                    "ACC-1001", "20-00-00", 4200.00);
-            return body;
-        }
-
-        // ---- FIX (the intended final state) ----
         body.put("full_name", maskName(user.getFullName()));
         body.put("email", maskEmail(user.getEmail()));
         body.put("account_number", "ACC-****1001");
         body.put("sort_code", "20-**-**");
-        body.remove("balance");
+        body.put("currency", "GBP");
+
+        // Log the user id, not the profile. The name, email, account number
+        // and balance must never reach the log files.
         log.info("profile lookup for user id {}", user.getId());
         return body;
     }
