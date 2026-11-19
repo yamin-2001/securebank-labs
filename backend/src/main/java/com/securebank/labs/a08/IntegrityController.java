@@ -64,50 +64,18 @@ public class IntegrityController {
     /**
      * Import an account from an uploaded file.
      *
-     * <p><strong>LAB 20 (VULNERABLE):</strong> the bytes are deserialized with
-     * {@code ObjectInputStream}. The stream names the classes it instantiates,
-     * so an attacker who can upload bytes chooses what gets constructed — and
-     * {@code readObject} runs during construction, before any validation the
-     * application could perform.
+     * <p><strong>LAB 20 (FIXED):</strong> the bytes used to be deserialized
+     * with {@code ObjectInputStream}. The stream names the classes it
+     * instantiates, so an attacker who could upload bytes chose what got
+     * constructed — and {@code readObject} runs during construction, before
+     * any validation the application could perform.
      *
-     * <p><strong>FIX:</strong> do not deserialize untrusted bytes. Parse a
-     * data-only format (JSON/CSV) instead, or constrain the stream with an
-     * {@code ObjectInputFilter} allowlist so the bytes cannot choose the
-     * class.
-     */
-    @PostMapping("/import-account")
-    public ResponseEntity<Map<String, Object>> importAccount(@RequestParam("file") MultipartFile file) {
-        Map<String, Object> out = new LinkedHashMap<>();
-
-        if (labs.isEnabled("deserialization")) {
-            // LAB 20 (VULNERABLE): ObjectInputStream on bytes from the client.
-            //
-            // FIX: delete this branch and call importAccountSafe(file) instead.
-            try (InputStream raw = file.getInputStream();
-                 ObjectInputStream in = new ObjectInputStream(raw)) {
-                Object object = in.readObject();
-                out.put("message", "Account imported");
-                out.put("type", object == null ? "null" : object.getClass().getName());
-                return ResponseEntity.ok(out);
-            } catch (IOException | ClassNotFoundException e) {
-                out.put("error", "Could not read the import file");
-                out.put("detail", e.getMessage());
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(out);
-            }
-        }
-
-        // ---- FIX (the intended final state) ----
-        return importAccountSafe(file);
-    }
-
-    /**
-     * ---- FIX (the intended final state) -------------------------------
-     *
-     * <p>A data-only import. The uploaded bytes are parsed as JSON, so they
+     * <p>The import is now data-only: the bytes are parsed as JSON, so they
      * can describe an account but they cannot name a class, and nothing in
      * the file can become code.
      */
-    private ResponseEntity<Map<String, Object>> importAccountSafe(MultipartFile file) {
+    @PostMapping("/import-account")
+    public ResponseEntity<Map<String, Object>> importAccount(@RequestParam("file") MultipartFile file) {
         try {
             String body = new String(file.getBytes(), java.nio.charset.StandardCharsets.UTF_8);
             Map<String, Object> out = new LinkedHashMap<>();
