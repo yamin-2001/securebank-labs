@@ -71,14 +71,3 @@ SELECT setval(pg_get_serial_sequence('transfers', 'id'),
               GREATEST((SELECT COALESCE(MAX(id), 0) FROM transfers), 1));
 SELECT setval(pg_get_serial_sequence('password_reset_tokens', 'id'),
               GREATEST((SELECT COALESCE(MAX(id), 0) FROM password_reset_tokens), 1));
-
--- Reset tokens are stored so Lab 19 (predictable reset token) has state to
--- read. The token format is md5(username + unixTimestamp) — see Lab 19.
-CREATE TABLE IF NOT EXISTS password_reset_tokens (
-    id          BIGSERIAL PRIMARY KEY,
-    username    VARCHAR(64)  NOT NULL,
-    token       VARCHAR(128) NOT NULL,
-    expires_at  TIMESTAMP    NOT NULL,
-    used        BOOLEAN      NOT NULL DEFAULT FALSE,
-    created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
-);

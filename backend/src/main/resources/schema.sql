@@ -35,6 +35,17 @@ CREATE TABLE IF NOT EXISTS transfers (
     created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Reset tokens are stored so Lab 19 (predictable reset token) has state to
+-- read. The token format is md5(username + unixTimestamp) — see Lab 19.
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id          BIGSERIAL PRIMARY KEY,
+    username    VARCHAR(64)  NOT NULL,
+    token       VARCHAR(128) NOT NULL,
+    expires_at  TIMESTAMP    NOT NULL,
+    used        BOOLEAN      NOT NULL DEFAULT FALSE,
+    created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_accounts_owner ON accounts (owner_id);
 CREATE INDEX IF NOT EXISTS idx_transfers_from ON transfers (from_account_id);
 CREATE INDEX IF NOT EXISTS idx_transfers_to   ON transfers (to_account_id);
