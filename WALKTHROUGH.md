@@ -35,34 +35,31 @@ to compare afterwards — but read the hint first and try it yourself.
 
 > **The one rule of this project**
 >
-> A toggle *arms* a lab. It is **never** the fix.
+> A lab is fixed by changing code, and by nothing else.
 >
-> Every lab has a flag in `backend/src/main/resources/application.yml`:
+> There are no flags. Each lab's vulnerability lives in one method, on one
+> code path, and that path is the only path — the vulnerable code is the
+> shipped code, with no switch beside it. **Fixing a lab means replacing
+> that code** with the correct version.
 >
-> ```yaml
-> lab:
->   idor: true
-> ```
+> That is what lets the verification harness assert on *behaviour* instead
+> of on configuration: the same exploit succeeds before your fix and fails
+> after it, with nothing but a code change in between.
 >
-> The keys are **flat** — `lab.<slug>`, one boolean per lab. (There is no
-> `.enabled` sub-level: `LabToggles` reads the property
-> `lab.<slug>` directly, so `lab.idor.enabled` would resolve to the
-> default `false` and quietly *disarm* the lab.)
+> If you catch yourself looking for a switch to flip, you have not fixed
+> anything.
 >
-> `true` means *this vulnerability is live*. **Fixing a lab means changing
-> code.** The flag stays `true` when you are done. That is what lets the
-> verification harness assert on *behaviour* instead of on configuration:
-> the same exploit succeeds before your fix and fails after it, with no flag
-> change in between.
+> ### Two branches
 >
-> If you catch yourself flipping a toggle to make a check pass, you have not
-> fixed anything.
+> | Branch | What it is |
+> | --- | --- |
+> | `main` | The shipped **vulnerable** app. Every lab is exploitable. |
+> | `fixed` | The same app with every lab fixed, one small commit per lab. |
 >
-> Two toggles are decorative: `lab.privesc` (Lab 2) and
-> `lab.filedisclosure` (Lab 6) are never read by any code, because those
-> two labs live in the security filter chain rather than behind a runtime
-> check. Their labs are live regardless. Every other toggle is
-> load-bearing — flipping it to `false` genuinely disarms that lab.
+> `git switch main` to work on the labs; `git switch fixed` to see what a
+> complete set of fixes looks like. The commits on `fixed` are deliberately
+> small — `lab-01 fixed`, `lab-02 fixed`, and so on — so you can read one
+> lab's fix at a time, or cherry-pick a single one.
 
 ---
 
@@ -116,13 +113,13 @@ securebank-labs/
 ├── backend/         Spring Boot 4 + Maven          → http://localhost:8080
 │   ├── pom.xml  mvnw  mvnw.cmd
 │   ├── src/main/java/com/securebank/
-│   │   ├── core/        LabToggles, AuthContext, PasswordHasher, error handling
+│   │   ├── core/        AuthContext, PasswordHasher, error handling
 │   │   ├── domain/      User, Account, Transfer + JPA repositories
 │   │   ├── security/    SecurityConfig, LabAuthFilter, LabJwtService, JwtKeys
 │   │   ├── labs/        a01/ a02/ a04/ a05/ a06/ a07/ a08/ a10/ — the 25 labs
 │   │   └── ui/          HealthController, LabStateController
 │   ├── src/main/resources/
-│   │   ├── application.yml             the 25 lab toggles + the weakened settings
+│   │   ├── application.yml             the weakened settings (verbose errors, etc.)
 │   │   ├── schema.sql  data.sql        idempotent schema and seed
 │   │   └── static/                     the Lab 6 files: .env, git-config-fixture/, backup.zip
 │   └── src/test/java/com/securebank/  seed-integrity and JWT lab tests
@@ -213,14 +210,14 @@ running, or the harness ran while the app was still starting.)
 
 ```bash
 python3 verify/run.py --list              # the catalogue
-python3 verify/run.py --show 13           # title, OWASP, endpoints, toggle, fix location
+python3 verify/run.py --show 13           # title, OWASP, endpoints, fix location
 python3 verify/run.py --lab 13            # run one check
 python3 verify/run.py --all --expect vulnerable
 python3 verify/run.py --all --expect fixed
 ```
 
 > `--show` prints the lab's **metadata**: title, OWASP category, severity,
-> endpoints, the toggle that arms it, and the file and method to fix. It does
+> endpoints, and the file and method to fix. It does
 > **not** print the exploit steps or the hint — those live here, in this
 > document, and in `solutions/SOLUTIONS.md` for the full fix.
 
@@ -461,8 +458,8 @@ becomes a pivot into the private network.
 allowed — look for `isAllowedCallback`. The bug is that nobody calls it
 before the fetch happens. Ask yourself: where exactly in the method should
 that check go, and what should the response look like when it fails? The
-service is also part of the `lab.ssrf` toggle, so the fix goes *inside* the
-method, not in the toggle.
+service is also part of the SSRF lab, so the fix goes *inside* the
+method.
 
 ---
 
@@ -706,7 +703,7 @@ legitimate admin session looks like.
 
 **Where it lives.**
 `backend/src/main/java/com/securebank/security/JwtKeys.java` →
-`secret(LabToggles)`
+`secret()`
 
 **Exploit steps.**
 
@@ -1929,10 +1926,10 @@ sensible-looking default. The default was sensible for the *code* (it needs
   (Return `401`. There is no identity, so there is no authoriser.)
 - Look at the class carefully. There is exactly **one** place that invents
   an identity: the block near the end of `doFilterInternal` that says
-  `if (userId == null && labs.isEnabled("failopen") ...)` and then sets
-  `userId = 1L; role = "admin"; username = "admin";`. **That block is the
-  bug.** Delete it — or make it refuse — and the filter falls through
-  unauthenticated, which is correct.
+  `if (userId == null && header != null && header.startsWith("Bearer "))`
+  and then sets `userId = 1L; role = "admin"; username = "admin";`. **That
+  block is the bug.** Delete it — or make it refuse — and the filter falls
+  through unauthenticated, which is correct.
 - The two `catch` blocks above it are **not** the bug. Both of them already
   call `unauthorized(res)` and `return`. They are what keeps Lab 21 and
   Lab 25 independent, so leave them alone.
@@ -2011,7 +2008,7 @@ The JUnit suite covers the seed integrity and the JWT lab tests.
 | Time | Content |
 |------|---------|
 | 09:00 | Setup: `make up`, `make run`, `make ui-install`, `make ui`, `make verify` |
-| 09:20 | Intro: OWASP Top 10, the "toggle arms, it is never the fix" rule |
+| 09:20 | Intro: OWASP Top 10, the "a lab is fixed by changing code" rule |
 | 09:40 | **A01** — Access Control (Labs 1–3) |
 | 10:40 | **A02** — Misconfiguration (Labs 4–6) |
 | 11:10 | **A04** — Cryptographic Failures (Labs 7–9) |
@@ -2042,7 +2039,7 @@ another — the matrix proves it, but it is worth knowing where to look:
 |---|---|
 | 5 (default creds) ↔ 7 (hashing) | Both touch the admin's stored hash. Fix the *comparison* in one and the *algorithm* in the other; the seed row in `data.sql` is shared. |
 | 7 (hashing) ↔ 10 (SQLi) | Lab 10's fix moves the password check from SQL into Java. Lab 7's fix changes the algorithm that check uses. Independent — if you keep the check in Java, both stay fixed. |
-| 11 (SpEL) ↔ 12 (SSTI) | They share a toggle: the template half of Lab 12 is gated on `lab.ssti`, Lab 11's flag. Turning `lab.ssti` off disarms **both**. Their *code* is in different classes and their fixes are independent. |
+| 11 (SpEL) ↔ 12 (SSTI) | Both are template injection, but their *code* is in different classes and their fixes are independent. Fixing one does not fix the other. |
 | 8 (hardcoded secret) ↔ 21 (`alg:none`) ↔ 25 (fail-open) | One `LabJwtService` and one `LabAuthFilter`. The secret matters for 8; `alg:none` does not need the secret; fail-open does not need a valid token at all. Three separate bugs, three separate fixes. |
 | 4 (debug trace) ↔ 23 (verbose error) ↔ 24 (type coercion) | Lab 23 is about the global `server.error.include-*` settings. Lab 24 has its **own** handler precisely so it does not ride on Lab 23's fix. |
 | 13 (stored XSS) ↔ 18 (session fixation) | Session fixation is usually delivered *through* a stored XSS. Fix Lab 13 and you lose the delivery mechanism for Lab 18 — but the fix for Lab 18 is still the fix for Lab 18. |
@@ -2068,7 +2065,7 @@ another — the matrix proves it, but it is worth knowing where to look:
   the vulnerable code and the fixed code side by side. Compare *after* you
   have tried, not before.
 - `python3 verify/run.py --show <id>` — one lab's metadata: its title, OWASP
-  category, severity, endpoints, the toggle that arms it, and the file and
+  category, severity, endpoints, and the file and
   method to fix.
 - The **Labs panel** in the running app (top right of the navbar) — the same
   information, in the browser.

@@ -56,7 +56,8 @@ differ, the note says so.
 **`backend/src/main/java/com/securebank/labs/a01/AccountService.java`**
 
 ```java
-        if (labs.isEnabled("idor")) {
+        // No ownership check — this returns any account by id.
+        return account;
 ```
 
 ### The fix
@@ -144,7 +145,8 @@ was a *missing* check, so the fix is the *addition* of one.
 **`backend/src/main/java/com/securebank/labs/a01/SsrfStatementService.java`**
 
 ```java
-        if (labs.isEnabled("ssrf")) {
+        // The server fetches any URL the caller names.
+        body.put("status", "sent");
 ```
 
 ### The fix
@@ -201,7 +203,12 @@ Disable redirects too, or the allowlist is trivially bypassed with a 302.
 **`backend/src/main/java/com/securebank/labs/a02/DebugLeakController.java`**
 
 ```java
-        if (labs.isEnabled("debugtrace")) {
+        // The exception message carries the secrets.
+        throw new IllegalStateException(
+                "diagnostic failure while loading profile [" + detail + "]"
+                        + " -- jwt signing secret=" + JwtKeys.HARDCODED_SECRET
+                        + " jdbc url=jdbc:postgresql://localhost:5432/securebank"
+                        + " db user=securebank db password=securebank");
 ```
 
 ### The fix
@@ -254,7 +261,17 @@ message removes the secret.
 **`backend/src/main/java/com/securebank/labs/a02/AdminPanelController.java`**
 
 ```java
-        if (labs.isEnabled("admincreds")) {
+        // The shipped default credentials always work.
+        if (DEFAULT_USERNAME.equals(username) && DEFAULT_PASSWORD.equals(password)) {
+            Map<String, Object> ok = new LinkedHashMap<>();
+            ok.put("authenticated", true);
+            ok.put("username", username);
+            ok.put("role", "admin");
+            ok.put("session", "admin-panel-session-token");
+            return ResponseEntity.ok(ok);
+        }
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of("error", "Invalid credentials"));
 ```
 
 ### The fix
@@ -348,7 +365,9 @@ Then rebuild and restart. The three URLs should 404.
 **`backend/src/main/java/com/securebank/core/PasswordHasher.java`**
 
 ```java
-        if (labs.isEnabled("md5hash")) {
+    public String hash(String password) {
+        return md5Hex(password == null ? "" : password);
+    }
 ```
 
 ### The fix
@@ -411,15 +430,39 @@ row by row: the MD5 rows keep working until you replace them.
 - OWASP: A04
 - Severity: Medium
 - Endpoint: `any authenticated endpoint`
-- Vulnerable code: `backend/src/main/java/com/securebank/security/JwtKeys.java -> secret(LabToggles)`
+- Vulnerable code: `backend/src/main/java/com/securebank/security/JwtKeys.java -> secret()`
 
 ### The vulnerable code
 
 **`backend/src/main/java/com/securebank/security/JwtKeys.java`**
 
 ```java
-        if (labs.isEnabled("jwtsecret")) {
-            // LAB 8 (VULNERABLE): the secret is a literal in the source tree.
+    public static String secret() {
+        return HARDCODED_SECRET;
+    }
+```
+
+**`backend/src/main/java/com/securebank/security/JwtKeys.java`**
+
+```java
+    /** Where a real deployment would read the secret from. */
+    public static final String SECRET_ENV_VAR = "APP_JWT_SECRET";
+```
+
+**`backend/src/main/java/com/securebank/security/JwtKeys.java`**
+
+```java
+    private static final String fallbackSecret =
+            "no-secret-configured-" + java.util.UUID.randomUUID();
+```
+
+**`backend/src/main/java/com/securebank/security/JwtKeys.java`**
+
+```java
+    /** LAB 8 (VULNERABLE): logged at startup so anyone with log access can read it. */
+    public static void logSecretAtStartup(org.slf4j.Logger log) {
+        log.warn("JWT signing secret is: {}", secret());
+    }
 ```
 
 ### The fix
@@ -434,13 +477,93 @@ row by row: the MD5 rows keep working until you replace them.
      * fails fast at startup if it is missing or too short — a placeholder
      * that refuses to boot is better than a real secret in git.
      */
-    public static byte[] secret(LabToggles labs) {
-        String configured = System.getenv("JWT_SECRET");
-        if (configured == null || configured.length() < 32) {
-            throw new IllegalStateException(
-                    "JWT_SECRET must be set and at least 32 characters long");
+    public static String secret() {
+        String fromEnv = System.getenv(SECRET_ENV_VAR);
+        if (fromEnv != null && !fromEnv.isBlank()) {
+            return fromEnv;
         }
-        return configured.getBytes(StandardCharsets.UTF_8);
+        String fromProperty = System.getProperty(SECRET_PROPERTY);
+        if (fromProperty != null && !fromProperty.isBlank()) {
+            return fromProperty;
+        }
+        // No secret configured — a random one for the lifetime of the
+        // process. A real deployment should fail to start instead.
+        return fallbackSecret;
+    }
+```
+
+**`backend/src/main/java/com/securebank/security/JwtKeys.java`**
+
+```java
+    /**
+     * The signing secret comes from configuration, never from the source.
+     *
+     * <p>{@code JWT_SECRET} must be at least 32 bytes for HS256. The app
+     * fails fast at startup if it is missing or too short — a placeholder
+     * that refuses to boot is better than a real secret in git.
+     */
+    public static String secret() {
+        String fromEnv = System.getenv(SECRET_ENV_VAR);
+        if (fromEnv != null && !fromEnv.isBlank()) {
+            return fromEnv;
+        }
+        String fromProperty = System.getProperty(SECRET_PROPERTY);
+        if (fromProperty != null && !fromProperty.isBlank()) {
+            return fromProperty;
+        }
+        // No secret configured — a random one for the lifetime of the
+        // process. A real deployment should fail to start instead.
+        return fallbackSecret;
+    }
+```
+
+**`backend/src/main/java/com/securebank/security/JwtKeys.java`**
+
+```java
+    /**
+     * The signing secret comes from configuration, never from the source.
+     *
+     * <p>{@code JWT_SECRET} must be at least 32 bytes for HS256. The app
+     * fails fast at startup if it is missing or too short — a placeholder
+     * that refuses to boot is better than a real secret in git.
+     */
+    public static String secret() {
+        String fromEnv = System.getenv(SECRET_ENV_VAR);
+        if (fromEnv != null && !fromEnv.isBlank()) {
+            return fromEnv;
+        }
+        String fromProperty = System.getProperty(SECRET_PROPERTY);
+        if (fromProperty != null && !fromProperty.isBlank()) {
+            return fromProperty;
+        }
+        // No secret configured — a random one for the lifetime of the
+        // process. A real deployment should fail to start instead.
+        return fallbackSecret;
+    }
+```
+
+**`backend/src/main/java/com/securebank/security/JwtKeys.java`**
+
+```java
+    /**
+     * The signing secret comes from configuration, never from the source.
+     *
+     * <p>{@code JWT_SECRET} must be at least 32 bytes for HS256. The app
+     * fails fast at startup if it is missing or too short — a placeholder
+     * that refuses to boot is better than a real secret in git.
+     */
+    public static String secret() {
+        String fromEnv = System.getenv(SECRET_ENV_VAR);
+        if (fromEnv != null && !fromEnv.isBlank()) {
+            return fromEnv;
+        }
+        String fromProperty = System.getProperty(SECRET_PROPERTY);
+        if (fromProperty != null && !fromProperty.isBlank()) {
+            return fromProperty;
+        }
+        // No secret configured — a random one for the lifetime of the
+        // process. A real deployment should fail to start instead.
+        return fallbackSecret;
     }
 ```
 
@@ -473,10 +596,31 @@ is better than a real one in git.
 **`backend/src/main/java/com/securebank/labs/a04/CryptoLeakController.java`**
 
 ```java
-        if (labs.isEnabled("pii")) {
+        body.put("full_name", user.getFullName());
+        body.put("email", user.getEmail());
+        body.put("account_number", "ACC-1001");
+        body.put("sort_code", "20-00-00");
+```
+
+**`backend/src/main/java/com/securebank/labs/a04/CryptoLeakController.java`**
+
+```java
+    private static final Logger log = LoggerFactory.getLogger(CryptoLeakController.class);
 ```
 
 ### The fix
+
+**`backend/src/main/java/com/securebank/labs/a04/CryptoLeakController.java`**
+
+```java
+        // Mask what the caller does not need, and keep the full value out
+        // of the log line.
+        body.put("card_number", maskCard(fullCardNumber));
+        body.put("national_id", maskNationalId(fullNationalId));
+        body.put("date_of_birth", maskDateOfBirth(fullDateOfBirth));
+
+        LOGGER.info("profile requested for user {}", callerId);   // no PII
+```
 
 **`backend/src/main/java/com/securebank/labs/a04/CryptoLeakController.java`**
 
@@ -516,13 +660,19 @@ only where the business genuinely needs it.
 **`backend/src/main/java/com/securebank/labs/a05/InjectionController.java`**
 
 ```java
-        if (labs.isEnabled("sqli")) {
+        String sql = "SELECT id, from_account_id, to_account_id, amount, note, status"
+                + " FROM transfers WHERE note LIKE '%" + query + "%'";
+        return jdbc.queryForList(sql);
 ```
 
 **`backend/src/main/java/com/securebank/labs/a07/AuthController.java`**
 
 ```java
-        if (labs.isEnabled("sqli")) {
+        List<Map<String, Object>> rows = rawSql.findUserRaw(username);
+        User user = rows.isEmpty() ? null : toUser(rows.get(0));
+        if (user == null) {
+            return failure(username);
+        }
 ```
 
 ### The fix
@@ -588,7 +738,8 @@ exploit used. The search endpoint has its own copy of the mistake.
 **`backend/src/main/java/com/securebank/labs/a05/SstiRemarkController.java`**
 
 ```java
-        if (labs.isEnabled("ssti")) {
+            return parser.parseExpression(remark)
+                    .getValue(new StandardEvaluationContext(), String.class);
 ```
 
 ### The fix
@@ -636,13 +787,24 @@ attacker-controlled, `T(java.lang.Runtime)` would not resolve.
 **`backend/src/main/java/com/securebank/labs/a05/ReportController.java`**
 
 ```java
-        if (labs.isEnabled("ssti")) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("account_id", body.get("account_id"));
+        out.put("report", renderTemplateVulnerable(body.get("template")));
+        return out;
 ```
 
 **`backend/src/main/java/com/securebank/labs/a05/ReportController.java`**
 
 ```java
-        if (labs.isEnabled("cmdinject")) {
+        out.put("command_output", runShell(
+                "date -d '" + from + "' '+%Y-%m-%d' && date -d '" + to + "' '+%Y-%m-%d'"));
+```
+
+**`backend/src/main/java/com/securebank/labs/a05/ReportController.java`**
+
+```java
+    /** LAB 12 (VULNERABLE): parse the caller's template. */
+    private String renderTemplateVulnerable(String template) {
 ```
 
 ### The fix
@@ -651,33 +813,27 @@ attacker-controlled, `T(java.lang.Runtime)` would not resolve.
 
 ```java
     // The report template is a constant, and the account id is a variable.
-    private Map<String, Object> generateFixed(Map<String, String> body) {
+    private String renderTemplateFixed(String accountId) {
         StandardEvaluationContext context = new StandardEvaluationContext();
-        context.setVariable("accountId", body.get("account_id"));
-        String report = parser.parseExpression(
+        context.setVariable("accountId", accountId);
+        return parser.parseExpression(
                         "'Statement for account ' + #accountId + ' — balance 4200.00 GBP'")
                 .getValue(context, String.class);
-        Map<String, Object> out = new LinkedHashMap<>();
-        out.put("account_id", body.get("account_id"));
-        out.put("report", report);
-        return out;
     }
 
     // The date filter never builds a command line. The arguments are a
     // list, so there is no shell to break out of.
-    private Map<String, Object> dateFilterFixed(Map<String, String> body) {
-        String from = body.get("from_date");
-        String to = body.get("to_date");
-
-        ProcessBuilder builder = new ProcessBuilder("date", "-d", from);
-        builder.redirectErrorStream(true);
-        String output = runAndCapture(builder);
-
-        Map<String, Object> out = new LinkedHashMap<>();
-        out.put("from_date", from);
-        out.put("to_date", to);
-        out.put("output", output);
-        return out;
+    private String runCommand(List<String> command) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(command);
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+            String output = read(process);
+            process.waitFor(10, TimeUnit.SECONDS);
+            return output.trim();
+        } catch (IOException | InterruptedException e) {
+            return "command failed: " + e.getMessage();
+        }
     }
 ```
 
@@ -685,33 +841,55 @@ attacker-controlled, `T(java.lang.Runtime)` would not resolve.
 
 ```java
     // The report template is a constant, and the account id is a variable.
-    private Map<String, Object> generateFixed(Map<String, String> body) {
+    private String renderTemplateFixed(String accountId) {
         StandardEvaluationContext context = new StandardEvaluationContext();
-        context.setVariable("accountId", body.get("account_id"));
-        String report = parser.parseExpression(
+        context.setVariable("accountId", accountId);
+        return parser.parseExpression(
                         "'Statement for account ' + #accountId + ' — balance 4200.00 GBP'")
                 .getValue(context, String.class);
-        Map<String, Object> out = new LinkedHashMap<>();
-        out.put("account_id", body.get("account_id"));
-        out.put("report", report);
-        return out;
     }
 
     // The date filter never builds a command line. The arguments are a
     // list, so there is no shell to break out of.
-    private Map<String, Object> dateFilterFixed(Map<String, String> body) {
-        String from = body.get("from_date");
-        String to = body.get("to_date");
+    private String runCommand(List<String> command) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(command);
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+            String output = read(process);
+            process.waitFor(10, TimeUnit.SECONDS);
+            return output.trim();
+        } catch (IOException | InterruptedException e) {
+            return "command failed: " + e.getMessage();
+        }
+    }
+```
 
-        ProcessBuilder builder = new ProcessBuilder("date", "-d", from);
-        builder.redirectErrorStream(true);
-        String output = runAndCapture(builder);
+**`backend/src/main/java/com/securebank/labs/a05/ReportController.java`**
 
-        Map<String, Object> out = new LinkedHashMap<>();
-        out.put("from_date", from);
-        out.put("to_date", to);
-        out.put("output", output);
-        return out;
+```java
+    // The report template is a constant, and the account id is a variable.
+    private String renderTemplateFixed(String accountId) {
+        StandardEvaluationContext context = new StandardEvaluationContext();
+        context.setVariable("accountId", accountId);
+        return parser.parseExpression(
+                        "'Statement for account ' + #accountId + ' — balance 4200.00 GBP'")
+                .getValue(context, String.class);
+    }
+
+    // The date filter never builds a command line. The arguments are a
+    // list, so there is no shell to break out of.
+    private String runCommand(List<String> command) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(command);
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+            String output = read(process);
+            process.waitFor(10, TimeUnit.SECONDS);
+            return output.trim();
+        } catch (IOException | InterruptedException e) {
+            return "command failed: " + e.getMessage();
+        }
     }
 ```
 
@@ -750,12 +928,7 @@ all, and never use `sh -c` with interpolated data.
 **`backend/src/main/java/com/securebank/labs/a05/NoteRenderer.java`**
 
 ```java
-        if (labs.isEnabled("xss")) {
-            // LAB 13 (VULNERABLE): raw interpolation. The note becomes markup.
-            //
-            // FIX: use renderFixed(note) below.
-            return "<div class=\"txn-note\">" + (note == null ? "" : note) + "</div>";
-        }
+        return "<div class=\"txn-note\">" + (note == null ? "" : note) + "</div>";
 ```
 
 ### The fix
@@ -816,7 +989,8 @@ leaves the browser vulnerable.
 **`backend/src/main/java/com/securebank/labs/a06/TransferService.java`**
 
 ```java
-        if (labs.isEnabled("negativetransfer")) {
+        from.setBalance(from.getBalance().add(amount));
+        to.setBalance(to.getBalance().add(amount));
 ```
 
 ### The fix
@@ -869,7 +1043,9 @@ to `10.00`.
 **`backend/src/main/java/com/securebank/labs/a06/ProfileController.java`**
 
 ```java
-        if (labs.isEnabled("massassign")) {
+        if (body.containsKey("role")) {
+            user.setRole(String.valueOf(body.get("role")));
+        }
 ```
 
 ### The fix
@@ -932,7 +1108,8 @@ surface and the persistence model should not be the same shape.
 **`backend/src/main/java/com/securebank/labs/a07/AuthController.java`**
 
 ```java
-        if (labs.isEnabled("userenum")) {
+        boolean exists = users.findByUsername(username).isPresent();
+        body.put("error", exists ? "Incorrect password" : "User not found");
 ```
 
 ### The fix
@@ -983,32 +1160,23 @@ exist, so both paths cost the same.
 **`backend/src/main/java/com/securebank/labs/a07/LoginAttemptService.java`**
 
 ```java
-        // LAB 17 (VULNERABLE): nothing is counted and nothing is refused.
-        //
-        // FIX: the two lines below are the fix.
-        //
-        //   if (isBlocked(username)) {
-        //       throw new TooManyAttemptsException(username);
-        //   }
-        //
-        // and call recordFailure(username) on a failed login and
-        // recordSuccess(username) on a successful one.
+    public void applyRateLimit(String username) {
+    }
 ```
 
 **`backend/src/main/java/com/securebank/labs/a07/AuthController.java`**
 
 ```java
         // LAB 17: a failed attempt should count towards the account's budget.
-        //
-        // FIX: attempts.recordFailure(username);
+        Map<String, Object> body = new LinkedHashMap<>();
 ```
 
 **`backend/src/main/java/com/securebank/labs/a07/AuthController.java`**
 
 ```java
+    private ResponseEntity<Map<String, Object>> success(User user) {
         // LAB 17: a successful login should clear the account's counter.
-        //
-        // FIX: attempts.recordSuccess(user.getUsername());
+        String token
 ```
 
 ### The fix
@@ -1109,10 +1277,36 @@ attacking one instance resets it.
 **`backend/src/main/java/com/securebank/labs/a07/SessionLoginController.java`**
 
 ```java
-        if (labs.isEnabled("sessionfixation")) {
+        // LAB 18 (VULNERABLE): the session id is NOT rotated. The id the
+        // attacker planted before the victim logged in is now an
+        // authenticated session.
+```
+
+**`backend/src/main/java/com/securebank/labs/a07/SessionLoginController.java`**
+
+```java
+    /**
+     * Establish a session before logging in.
 ```
 
 ### The fix
+
+**`backend/src/main/java/com/securebank/labs/a07/SessionLoginController.java`**
+
+```java
+    @Bean
+    @Order(1)
+    public SecurityFilterChain sessionChain(HttpSecurity http) throws Exception {
+        http.securityMatcher("/api/auth/login-session", "/api/session/**")
+                .csrf(csrf -> csrf.disable())
+                // FIX: the `sessionFixation(none())` line is deleted, so
+                // Spring Security rotates the session id on login again.
+                .sessionManagement(sm -> sm.sessionFixation(fixation -> fixation.changeSessionId()))
+                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
+                ...;
+        return http.build();
+    }
+```
 
 **`backend/src/main/java/com/securebank/labs/a07/SessionLoginController.java`**
 
@@ -1161,7 +1355,8 @@ replayed after login and must be refused.
 **`backend/src/main/java/com/securebank/labs/a07/AuthController.java`**
 
 ```java
-        if (labs.isEnabled("resettoken")) {
+        // LAB 19 (VULNERABLE): predictable token.
+        String token = md5.hex(username + (System.currentTimeMillis() / 1000));
 ```
 
 ### The fix
@@ -1219,7 +1414,17 @@ take over any account".
 **`backend/src/main/java/com/securebank/labs/a08/IntegrityController.java`**
 
 ```java
-        if (labs.isEnabled("deserialization")) {
+        try (InputStream raw = file.getInputStream();
+             ObjectInputStream in = new ObjectInputStream(raw)) {
+            Object object = in.readObject();
+            out.put("message", "Account imported");
+            out.put("type", object == null ? "null" : object.getClass().getName());
+            return ResponseEntity.ok(out);
+        } catch (IOException | ClassNotFoundException e) {
+            out.put("error", "Could not read the import file");
+            out.put("detail", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(out);
+        }
 ```
 
 ### The fix
@@ -1275,7 +1480,11 @@ reason.
 **`backend/src/main/java/com/securebank/security/LabJwtService.java`**
 
 ```java
-        if (labs.isEnabled("jwtalgnone") && declaresAlgNone(token)) {
+        if (declaresAlgNone(token)) {
+            return parseWithoutAlgorithmCheck(token);
+        }
+        // Lab 8 default: pin HS256 and verify the signature.
+        return secureParser.parse(token);
 ```
 
 ### The fix
@@ -1321,7 +1530,14 @@ tempting and the failure modes are subtle.
 **`backend/src/main/java/com/securebank/labs/a08/IntegrityController.java`**
 
 ```java
-        if (labs.isEnabled("upload")) {
+            Files.createDirectories(UPLOAD_DIR);
+            Path target = UPLOAD_DIR.resolve(originalName == null ? "upload.bin" : originalName);
+            Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+
+            out.put("message", "Upload stored");
+            out.put("stored_as", target.getFileName().toString());
+            out.put("location", "/uploads/" + target.getFileName());
+            out.put("content_type", contentTypeFor(originalName));
 ```
 
 ### The fix
@@ -1391,13 +1607,15 @@ it must not come back as HTML.
 **`backend/src/main/java/com/securebank/labs/a10/VerboseErrorController.java`**
 
 ```java
-        if (labs.isEnabled("verboseerror")) {
+        int accountId = Integer.parseInt(id);
+        Map<String, Object> out = new LinkedHashMap<>();
 ```
 
 **`backend/src/main/java/com/securebank/labs/a10/VerboseErrorController.java`**
 
 ```java
-        if (labs.isEnabled("verboseerror") && raw instanceof String) {
+        int accountId = Integer.parseInt(String.valueOf(raw));
+        return ResponseEntity.ok(Map.of("account_id", accountId, "currency", "GBP"));
 ```
 
 ### The fix
@@ -1476,7 +1694,11 @@ a number and reject a non-number with a clear message; do not let an
 **`backend/src/main/java/com/securebank/labs/a10/CoercionController.java`**
 
 ```java
-        if (labs.isEnabled("typecoercion")) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("error", "Could not read the request body");
+        out.put("detail", ex.getMessage());
+        out.put("cause", ex.getCause() == null ? null : ex.getCause().toString());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(out);
 ```
 
 ### The fix
@@ -1523,8 +1745,7 @@ where it belongs.
 **`backend/src/main/java/com/securebank/security/LabAuthFilter.java`**
 
 ```java
-        if (userId == null && labs.isEnabled("failopen")
-                && header != null && header.startsWith("Bearer ")) {
+        if (userId == null && header != null && header.startsWith("Bearer ")) {
             userId = 1L;
             role = "admin";
             username = "admin";
