@@ -15,8 +15,9 @@ import io.jsonwebtoken.security.Keys;
  *
  * <p>Holds the two JWT labs, each with its own fix location:
  * <ul>
- *   <li><strong>Lab 8</strong> — the signing secret is the hardcoded literal
- *       {@link JwtKeys#HARDCODED_SECRET}.</li>
+ *   <li><strong>Lab 8</strong> — the signing secret used to be a hardcoded
+ *       literal in the source tree; it now comes from the environment. See
+ *       {@link JwtKeys#secret(LabToggles)}.</li>
  *   <li><strong>Lab 21</strong> — {@link #parse(String)} may hand the token to
  *       a hand-rolled parser that never inspects the {@code alg} header and
  *       never verifies the signature.</li>
