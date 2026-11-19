@@ -73,20 +73,9 @@ public class AuthController {
         String username = body.get("username");
         String password = body.get("password");
 
-        // LAB 17 (VULNERABLE): no rate limiting. A brute-force loop can guess
-        // a weak password in seconds.
-        //
-        // FIX: the two lines below are the fix. Delete the vulnerable branch
-        // inside LoginAttemptService and call the service here:
-        //
-        //   if (attempts.isBlocked(username)) {
-        //       return tooManyAttempts();
-        //   }
-        //   ... authenticate ...
-        //   attempts.recordFailure(username);   // on failure
-        //   attempts.recordSuccess(username);   // on success
-        //
-        // The service is injected and ready; the wiring is what is missing.
+        // LAB 17 (FIXED): the account has to be within its attempt budget
+        // before we even look at the password. A brute-force loop now hits
+        // a 429 after MAX_ATTEMPTS failures.
         attempts.applyRateLimit(username);
 
         // FIXED: a parameterised lookup — the payload is treated as data.

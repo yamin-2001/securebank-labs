@@ -3,16 +3,17 @@ package com.securebank.labs.a07;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import com.securebank.core.LabToggles;
 import org.springframework.stereotype.Service;
 
 /**
- * <strong>LAB 17 (A07 — Identification and Authentication Failures): no rate
+ * <strong>LAB 17 (A07 — Identification and Authentication Failures): rate
  * limiting on the login endpoint.</strong>
  *
- * <p>Failed logins are counted here — but nothing ever reads the count. The
- * service exists so that the lab has a single, obvious fix location: make
- * {@link #applyRateLimit(String)} do its job.
+ * <p><strong>FIXED.</strong> Failed logins used to be counted here but
+ * nothing ever read the count, so a brute-force loop could guess a weak
+ * password in seconds. {@link #applyRateLimit(String)} now refuses the
+ * request once the account has spent its budget, and the login endpoint
+ * records failures and clears them on success.
  *
  * <p>The counters live in memory. That is fine for a lab; a real deployment
  * needs a shared store so the limit holds across instances.
@@ -26,11 +27,9 @@ public class LoginAttemptService {
     /** How long an account stays locked out, in seconds. */
     public static final long LOCKOUT_SECONDS = 300;
 
-    private final LabToggles labs;
     private final Map<String, Attempt> attempts = new ConcurrentHashMap<>();
 
-    public LoginAttemptService(LabToggles labs) {
-        this.labs = labs;
+    public LoginAttemptService() {
     }
 
     /**
@@ -90,34 +89,11 @@ public class LoginAttemptService {
      * clearing happens on the success path, so the counter reflects genuine
      * failures — a user who logs in successfully has not failed, and their
      * budget is restored.
-     *
-     * <p><strong>FIX:</strong> make this method refuse the request once the
-     * budget is gone:
-     *
-     * <pre>{@code
-     * if (isBlocked(username)) {
-     *     throw new TooManyAttemptsException(username);
-     * }
-     * }</pre>
-     *
-     * <p>and call {@code recordFailure(username)} on a failed login and
-     * {@code recordSuccess(username)} on a successful one.
      */
     public void applyRateLimit(String username) {
-        if (!labs.isEnabled("bruteforce")) {
-            return;
+        if (isBlocked(username)) {
+            throw new TooManyAttemptsException(username);
         }
-
-        // LAB 17 (VULNERABLE): nothing is counted and nothing is refused.
-        //
-        // FIX: the two lines below are the fix.
-        //
-        //   if (isBlocked(username)) {
-        //       throw new TooManyAttemptsException(username);
-        //   }
-        //
-        // and call recordFailure(username) on a failed login and
-        // recordSuccess(username) on a successful one.
     }
 
     /** The current time in seconds — the lockout window is measured in these. */
