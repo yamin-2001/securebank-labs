@@ -1,6 +1,5 @@
 package com.securebank.security;
 
-import com.securebank.core.LabToggles;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -16,12 +15,12 @@ import org.springframework.context.annotation.Configuration;
 public class LabSecurityBeans {
 
     @Bean
-    public LabJwtService labJwtService(LabToggles labs) {
-        return new LabJwtService(labs);
+    public LabJwtService labJwtService() {
+        return new LabJwtService();
     }
 
     @Bean
-    public LabAuthFilter labAuthFilter(LabJwtService jwt, LabToggles labs) {
-        return new LabAuthFilter(jwt, labs);
+    public LabAuthFilter labAuthFilter(LabJwtService jwt) {
+        return new LabAuthFilter(jwt);
     }
 }

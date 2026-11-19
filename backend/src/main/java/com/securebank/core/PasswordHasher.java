@@ -14,10 +14,9 @@ import org.springframework.stereotype.Component;
 /**
  * Password hashing.
  *
- * <p><strong>LAB 7 (A04 — Cryptographic Failures).</strong> While the
- * {@code md5hash} lab is armed, this class hashes with unsalted MD5 — the
- * scheme the seeded rows in {@code data.sql} use. Once the lab is disarmed
- * it hashes with PBKDF2-HMAC-SHA256 and a per-user random salt.
+ * <p><strong>LAB 7 (A04 — Cryptographic Failures).</strong> This class
+ * hashes with unsalted MD5 — the scheme the seeded rows in
+ * {@code data.sql} use.
  *
  * <p><strong>FIX:</strong> replace the MD5 branch with an adaptive
  * password hash (BCrypt, Argon2, or scrypt) and re-seed or migrate the
@@ -31,10 +30,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class PasswordHasher {
 
-    private final LabToggles labs;
-
-    public PasswordHasher(LabToggles labs) {
-        this.labs = labs;
+    public PasswordHasher() {
     }
 
     /**
@@ -43,12 +39,7 @@ public class PasswordHasher {
      * <p>LAB 7 (VULNERABLE): unsalted MD5. FIX: use BCrypt or Argon2.
      */
     public String hash(String password) {
-        if (labs.isEnabled("md5hash")) {
-            return md5Hex(password == null ? "" : password);
-        }
-        // FIXED: PBKDF2-HMAC-SHA256 with a fresh random salt per password.
-        String salt = randomSalt();
-        return pbkdf2(password == null ? "" : password, salt);
+        return md5Hex(password == null ? "" : password);
     }
 
     /**

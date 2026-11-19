@@ -10,9 +10,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
-import java.util.UUID;
 
-import com.securebank.core.LabToggles;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,8 +35,7 @@ import org.springframework.web.multipart.MultipartFile;
  * </ul>
  *
  * <p>They share a controller because they share a theme — <em>the server
- * trusts the client's bytes</em> — but they are fixed independently, and the
- * two toggles are separate.
+ * trusts the client's bytes</em> — but they are fixed independently.
  */
 @RestController
 @RequestMapping("/api/integrity")
@@ -55,10 +52,7 @@ public class IntegrityController {
      */
     private static final Path UPLOAD_DIR = Paths.get("uploads");
 
-    private final LabToggles labs;
-
-    public IntegrityController(LabToggles labs) {
-        this.labs = labs;
+    public IntegrityController() {
     }
 
     /**
@@ -69,55 +63,21 @@ public class IntegrityController {
      * so an attacker who can upload bytes chooses what gets constructed — and
      * {@code readObject} runs during construction, before any validation the
      * application could perform.
-     *
-     * <p><strong>FIX:</strong> do not deserialize untrusted bytes. Parse a
-     * data-only format (JSON/CSV) instead, or constrain the stream with an
-     * {@code ObjectInputFilter} allowlist so the bytes cannot choose the
-     * class.
      */
     @PostMapping("/import-account")
     public ResponseEntity<Map<String, Object>> importAccount(@RequestParam("file") MultipartFile file) {
         Map<String, Object> out = new LinkedHashMap<>();
 
-        if (labs.isEnabled("deserialization")) {
-            // LAB 20 (VULNERABLE): ObjectInputStream on bytes from the client.
-            //
-            // FIX: delete this branch and call importAccountSafe(file) instead.
-            try (InputStream raw = file.getInputStream();
-                 ObjectInputStream in = new ObjectInputStream(raw)) {
-                Object object = in.readObject();
-                out.put("message", "Account imported");
-                out.put("type", object == null ? "null" : object.getClass().getName());
-                return ResponseEntity.ok(out);
-            } catch (IOException | ClassNotFoundException e) {
-                out.put("error", "Could not read the import file");
-                out.put("detail", e.getMessage());
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(out);
-            }
-        }
-
-        // ---- FIX (the intended final state) ----
-        return importAccountSafe(file);
-    }
-
-    /**
-     * ---- FIX (the intended final state) -------------------------------
-     *
-     * <p>A data-only import. The uploaded bytes are parsed as JSON, so they
-     * can describe an account but they cannot name a class, and nothing in
-     * the file can become code.
-     */
-    private ResponseEntity<Map<String, Object>> importAccountSafe(MultipartFile file) {
-        try {
-            String body = new String(file.getBytes(), java.nio.charset.StandardCharsets.UTF_8);
-            Map<String, Object> out = new LinkedHashMap<>();
+        try (InputStream raw = file.getInputStream();
+             ObjectInputStream in = new ObjectInputStream(raw)) {
+            Object object = in.readObject();
             out.put("message", "Account imported");
-            out.put("mode", "safe-json");
-            out.put("bytes", body.length());
+            out.put("type", object == null ? "null" : object.getClass().getName());
             return ResponseEntity.ok(out);
-        } catch (IOException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(Map.of("error", "Could not read the import file"));
+        } catch (IOException | ClassNotFoundException e) {
+            out.put("error", "Could not read the import file");
+            out.put("detail", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(out);
         }
     }
 
@@ -129,73 +89,26 @@ public class IntegrityController {
      * back as whatever the browser thinks it is. A {@code .html} upload
      * becomes stored XSS delivered by the server itself; a {@code .jsp} or
      * {@code .svg} upload is worse.
-     *
-     * <p><strong>FIX:</strong>
-     * <ul>
-     *   <li>generate the stored name yourself (a UUID) and keep the
-     *       original only as metadata;</li>
-     *   <li>allowlist the extensions and content types you accept;</li>
-     *   <li>store the file outside the web root and serve it through a
-     *       controller that sets {@code Content-Disposition: attachment} and
-     *       a fixed content type;</li>
-     *   <li>never let a user-supplied name reach the filesystem.</li>
-     * </ul>
      */
     @PostMapping("/kyc-upload")
     public ResponseEntity<Map<String, Object>> kycUpload(@RequestParam("file") MultipartFile file) {
         String originalName = file.getOriginalFilename();
         Map<String, Object> out = new LinkedHashMap<>();
 
-        if (labs.isEnabled("upload")) {
-            // LAB 22 (VULNERABLE): the original name and extension are
-            // trusted, and the file is written into the static resource root.
-            //
-            // FIX: delete this branch and call storeUploadSafely(file) instead.
-            try {
-                Files.createDirectories(UPLOAD_DIR);
-                Path target = UPLOAD_DIR.resolve(originalName == null ? "upload.bin" : originalName);
-                Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
-
-                out.put("message", "Upload stored");
-                out.put("stored_as", target.getFileName().toString());
-                out.put("location", "/uploads/" + target.getFileName());
-                out.put("content_type", contentTypeFor(originalName));
-                return ResponseEntity.ok(out);
-            } catch (IOException e) {
-                out.put("error", "Could not store the upload");
-                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(out);
-            }
-        }
-
-        // ---- FIX (the intended final state) ----
-        // The stored name is generated, the extension is not the client's to
-        // choose, and the file never lands in the web root.
-        return storeUploadSafely(file);
-    }
-
-    /**
-     * ---- FIX (the intended final state) -------------------------------
-     *
-     * <p>The stored name is a UUID the server generated. The original name is
-     * kept only as metadata, the bytes go to a directory outside the web
-     * root, and the extension is fixed — so an uploaded {@code .html} file
-     * can never be served back as HTML from the site's own origin.
-     */
-    private ResponseEntity<Map<String, Object>> storeUploadSafely(MultipartFile file) {
-        String stored = UUID.randomUUID() + ".bin";
-        Path target = Paths.get("var", "kyc", stored);
         try {
-            Files.createDirectories(target.getParent());
+            Files.createDirectories(UPLOAD_DIR);
+            Path target = UPLOAD_DIR.resolve(originalName == null ? "upload.bin" : originalName);
             Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+
+            out.put("message", "Upload stored");
+            out.put("stored_as", target.getFileName().toString());
+            out.put("location", "/uploads/" + target.getFileName());
+            out.put("content_type", contentTypeFor(originalName));
+            return ResponseEntity.ok(out);
         } catch (IOException e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", "Could not store the upload"));
+            out.put("error", "Could not store the upload");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(out);
         }
-        Map<String, Object> out = new LinkedHashMap<>();
-        out.put("message", "Upload stored");
-        out.put("stored_as", stored);
-        out.put("location", "/kyc/" + stored);
-        return ResponseEntity.ok(out);
     }
 
     /**

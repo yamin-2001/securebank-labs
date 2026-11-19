@@ -3,7 +3,6 @@ package com.securebank.security;
 import java.io.IOException;
 import java.util.List;
 
-import com.securebank.core.LabToggles;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
@@ -42,11 +41,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class LabAuthFilter extends OncePerRequestFilter {
 
     private final LabJwtService jwt;
-    private final LabToggles labs;
 
-    public LabAuthFilter(LabJwtService jwt, LabToggles labs) {
+    public LabAuthFilter(LabJwtService jwt) {
         this.jwt = jwt;
-        this.labs = labs;
     }
 
     @Override
@@ -85,15 +82,13 @@ public class LabAuthFilter extends OncePerRequestFilter {
         }
 
         // LAB 25: the dangerous default identity. user_id 1 is the admin user.
-        // Only reachable while the failopen lab is armed.
         //
         // The trigger is "the token was accepted, but it did not name an
         // identity" — a token with no user_id claim, or one for a user that
         // no longer exists. The parser succeeded, so this does not depend on
         // which parser ran: Lab 21's fix (switching to jjwt) leaves this
         // branch exactly as it is.
-        if (userId == null && labs.isEnabled("failopen")
-                && header != null && header.startsWith("Bearer ")) {
+        if (userId == null && header != null && header.startsWith("Bearer ")) {
             userId = 1L;
             role = "admin";
             username = "admin";

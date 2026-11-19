@@ -6,7 +6,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.securebank.core.LabToggles;
 import com.securebank.core.Md5Hasher;
 import com.securebank.core.PasswordHasher;
 import com.securebank.domain.PasswordResetToken;
@@ -26,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Authentication endpoints.
  *
- * <p>Home to four labs, each with its own fix location and its own toggle:
+ * <p>Home to four labs, each with its own fix location:
  * <ul>
  *   <li><strong>LAB 10</strong> (A05) — SQL injection / login bypass</li>
  *   <li><strong>LAB 16</strong> (A06) — account enumeration via error messages</li>
@@ -47,13 +46,12 @@ public class AuthController {
     private final Md5Hasher md5;
     private final PasswordHasher passwords;
     private final LabJwtService jwt;
-    private final LabToggles labs;
     private final LoginAttemptService attempts;
 
     public AuthController(UserRepository users, PasswordResetTokenRepository resetTokens,
                           RawSqlUserLookup rawSql,
                           Md5Hasher md5, PasswordHasher passwords,
-                          LabJwtService jwt, LabToggles labs,
+                          LabJwtService jwt,
                           LoginAttemptService attempts) {
         this.users = users;
         this.resetTokens = resetTokens;
@@ -61,7 +59,6 @@ public class AuthController {
         this.md5 = md5;
         this.passwords = passwords;
         this.jwt = jwt;
-        this.labs = labs;
         this.attempts = attempts;
     }
 
@@ -72,74 +69,45 @@ public class AuthController {
      * straight into the SQL string. A payload like {@code admin' --} comments
      * out the password check and logs you in as admin.
      *
-     * <p><strong>FIX:</strong> use a parameterized query. The vulnerable
-     * statement and the parameterized replacement are shown side by side below.
+     * <p><strong>LAB 17 (VULNERABLE):</strong> no rate limiting. A
+     * brute-force loop can guess a weak password in seconds.
      */
     @PostMapping("/login")
     public ResponseEntity<Map<String, Object>> login(@RequestBody Map<String, String> body) {
         String username = body.get("username");
         String password = body.get("password");
 
-        // LAB 17 (VULNERABLE): no rate limiting. A brute-force loop can guess
-        // a weak password in seconds.
-        //
-        // FIX: the two lines below are the fix. Delete the vulnerable branch
-        // inside LoginAttemptService and call the service here:
-        //
-        //   if (attempts.isBlocked(username)) {
-        //       return tooManyAttempts();
-        //   }
-        //   ... authenticate ...
-        //   attempts.recordFailure(username);   // on failure
-        //   attempts.recordSuccess(username);   // on success
-        //
-        // The service is injected and ready; the wiring is what is missing.
         attempts.applyRateLimit(username);
 
-        if (labs.isEnabled("sqli")) {
-            // LAB 10 (VULNERABLE): string-concatenated SQL. The username is
-            // pasted into the statement, so `admin' --` comments out the
-            // rest of the WHERE clause and the admin row is returned with
-            // no password check at all.
-            //
-            // FIX: switch to the parameterized lookup.
-            //   User user = users.findByUsername(username).orElse(null);
-            //   if (user == null || !passwords.matches(password, user.getPasswordHash())) {
-            //       return failure(username);
-            //   }
-            //
-            // Note that the password check itself lives in Java, not in the
-            // SQL — so Lab 7 (the hashing) and Lab 10 (the injection) are
-            // genuinely independent. Fixing either leaves the other alone.
-            List<Map<String, Object>> rows = rawSql.findUserRaw(username);
-            User user = rows.isEmpty() ? null : toUser(rows.get(0));
-            if (user == null) {
-                return failure(username);
-            }
-            // LAB 16 needs the "wrong password" case to actually fail, so the
-            // password is still checked here — for ordinary usernames. The
-            // SQL injection payload carries a quote, and the password check
-            // is skipped for those, which is what lets `admin' --` in
-            // without a password.
-            //
-            // The check below is NOT part of the fix for Lab 16 — Lab 16's
-            // fix is in failure(), which returns one indistinguishable
-            // message either way.
-            if (!looksInjected(username)
-                    && !passwords.matches(password == null ? "" : password, user.getPasswordHash())) {
-                return failure(username);
-            }
-            // The SQL comment removed the password predicate, so for an
-            // injected username the password is not checked at all —
-            // that IS the vulnerability.
-            return success(user);
-        }
-
-        // FIXED: parameterised lookup — the payload is treated as data.
-        User user = users.findByUsername(username).orElse(null);
-        if (user == null || !passwords.matches(password == null ? "" : password, user.getPasswordHash())) {
+        // LAB 10 (VULNERABLE): string-concatenated SQL. The username is
+        // pasted into the statement, so `admin' --` comments out the
+        // rest of the WHERE clause and the admin row is returned with
+        // no password check at all.
+        //
+        // Note that the password check itself lives in Java, not in the
+        // SQL — so Lab 7 (the hashing) and Lab 10 (the injection) are
+        // genuinely independent. Fixing either leaves the other alone.
+        List<Map<String, Object>> rows = rawSql.findUserRaw(username);
+        User user = rows.isEmpty() ? null : toUser(rows.get(0));
+        if (user == null) {
             return failure(username);
         }
+        // LAB 16 needs the "wrong password" case to actually fail, so the
+        // password is still checked here — for ordinary usernames. The
+        // SQL injection payload carries a quote, and the password check
+        // is skipped for those, which is what lets `admin' --` in
+        // without a password.
+        //
+        // The check below is NOT part of the fix for Lab 16 — Lab 16's
+        // fix is in failure(), which returns one indistinguishable
+        // message either way.
+        if (!looksInjected(username)
+                && !passwords.matches(password == null ? "" : password, user.getPasswordHash())) {
+            return failure(username);
+        }
+        // The SQL comment removed the password predicate, so for an
+        // injected username the password is not checked at all —
+        // that IS the vulnerability.
         return success(user);
     }
 
@@ -181,32 +149,18 @@ public class AuthController {
     /**
      * LAB 16 (VULNERABLE): the error message reveals whether the username
      * exists — "User not found" versus "Incorrect password".
-     *
-     * <p>FIX: return one indistinguishable message for both cases, and
-     * equalise the response time.
      */
     private ResponseEntity<Map<String, Object>> failure(String username) {
         // LAB 17: a failed attempt should count towards the account's budget.
-        //
-        // FIX: attempts.recordFailure(username);
         Map<String, Object> body = new LinkedHashMap<>();
-        if (labs.isEnabled("userenum")) {
-            boolean exists = users.findByUsername(username).isPresent();
-            body.put("error", exists ? "Incorrect password" : "User not found");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
-        }
-
-        // FIXED: the same message either way.
-        body.put("error", "Invalid credentials");
+        boolean exists = users.findByUsername(username).isPresent();
+        body.put("error", exists ? "Incorrect password" : "User not found");
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
     }
 
     /**
      * LAB 17 (FIX helper): the response returned once an account has spent
      * its attempt budget.
-     *
-     * <p>FIX: return this from the login endpoint when
-     * {@code attempts.isBlocked(username)} is true.
      */
     private ResponseEntity<Map<String, Object>> tooManyAttempts() {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
@@ -217,9 +171,7 @@ public class AuthController {
      * LAB 17: the account has spent its attempt budget.
      *
      * <p>On the vulnerable build this exception is never thrown — the
-     * vulnerable {@code applyRateLimit} neither counts nor refuses. Once the
-     * fix is in place, the service throws it and this handler turns it into
-     * a 429.
+     * vulnerable {@code applyRateLimit} neither counts nor refuses.
      */
     @ExceptionHandler(LoginAttemptService.TooManyAttemptsException.class)
     public ResponseEntity<Map<String, Object>> tooManyAttemptsException(
@@ -229,8 +181,6 @@ public class AuthController {
 
     private ResponseEntity<Map<String, Object>> success(User user) {
         // LAB 17: a successful login should clear the account's counter.
-        //
-        // FIX: attempts.recordSuccess(user.getUsername());
         String token = jwt.issue(user.getId(), user.getUsername(), user.getRole());
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("token", token);
@@ -248,26 +198,13 @@ public class AuthController {
      * username and the approximate request time can recompute it offline.
      *
      * <p>The token is also returned in the response body, for lab convenience.
-     *
-     * <p><strong>FIX:</strong> use {@code secrets.token_urlsafe(32)}, store it
-     * with a short expiry, and mark it used after a single redemption. The
-     * response should not contain the token at all in production.
      */
     @PostMapping("/reset-request")
     public ResponseEntity<Map<String, Object>> resetRequest(@RequestBody Map<String, String> body) {
         String username = body.get("username");
 
-        String token;
-        if (labs.isEnabled("resettoken")) {
-            // LAB 19 (VULNERABLE): predictable token.
-            //
-            // FIX: token = secrets.token_urlsafe(32);
-            token = md5.hex(username + (System.currentTimeMillis() / 1000));
-        } else {
-            // FIXED: cryptographically random, stored, single-use, time-limited.
-            token = java.util.UUID.randomUUID().toString()
-                    .replace("-", "") + java.util.UUID.randomUUID().toString().replace("-", "");
-        }
+        // LAB 19 (VULNERABLE): predictable token.
+        String token = md5.hex(username + (System.currentTimeMillis() / 1000));
 
         PasswordResetToken record = new PasswordResetToken();
         record.setUsername(username);
