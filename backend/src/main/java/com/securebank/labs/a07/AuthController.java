@@ -3,7 +3,6 @@ package com.securebank.labs.a07;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 import com.securebank.core.LabToggles;
@@ -13,7 +12,6 @@ import com.securebank.domain.PasswordResetToken;
 import com.securebank.domain.User;
 import com.securebank.domain.repo.PasswordResetTokenRepository;
 import com.securebank.domain.repo.UserRepository;
-import com.securebank.labs.a05.RawSqlUserLookup;
 import com.securebank.security.LabJwtService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -28,7 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>Home to four labs, each with its own fix location and its own toggle:
  * <ul>
- *   <li><strong>LAB 10</strong> (A05) — SQL injection / login bypass</li>
+ *   <li><strong>LAB 10 (FIXED)</strong> (A05) — SQL injection / login bypass</li>
  *   <li><strong>LAB 16</strong> (A06) — account enumeration via error messages</li>
  *   <li><strong>LAB 17</strong> (A07) — no rate limiting</li>
  *   <li><strong>LAB 19</strong> (A07) — predictable password reset token</li>
@@ -43,7 +41,6 @@ public class AuthController {
 
     private final UserRepository users;
     private final PasswordResetTokenRepository resetTokens;
-    private final RawSqlUserLookup rawSql;
     private final Md5Hasher md5;
     private final PasswordHasher passwords;
     private final LabJwtService jwt;
@@ -51,13 +48,11 @@ public class AuthController {
     private final LoginAttemptService attempts;
 
     public AuthController(UserRepository users, PasswordResetTokenRepository resetTokens,
-                          RawSqlUserLookup rawSql,
                           Md5Hasher md5, PasswordHasher passwords,
                           LabJwtService jwt, LabToggles labs,
                           LoginAttemptService attempts) {
         this.users = users;
         this.resetTokens = resetTokens;
-        this.rawSql = rawSql;
         this.md5 = md5;
         this.passwords = passwords;
         this.jwt = jwt;
@@ -68,12 +63,10 @@ public class AuthController {
     /**
      * Log in and receive a bearer token.
      *
-     * <p><strong>LAB 10 (VULNERABLE):</strong> the username is concatenated
-     * straight into the SQL string. A payload like {@code admin' --} comments
-     * out the password check and logs you in as admin.
-     *
-     * <p><strong>FIX:</strong> use a parameterized query. The vulnerable
-     * statement and the parameterized replacement are shown side by side below.
+     * <p><strong>LAB 10 (FIXED):</strong> the lookup is parameterized — the
+     * username is bound as a JDBC parameter, so a payload like
+     * {@code admin' --} is matched as a literal username instead of
+     * commenting out the rest of the WHERE clause.
      */
     @PostMapping("/login")
     public ResponseEntity<Map<String, Object>> login(@RequestBody Map<String, String> body) {
@@ -96,86 +89,12 @@ public class AuthController {
         // The service is injected and ready; the wiring is what is missing.
         attempts.applyRateLimit(username);
 
-        if (labs.isEnabled("sqli")) {
-            // LAB 10 (VULNERABLE): string-concatenated SQL. The username is
-            // pasted into the statement, so `admin' --` comments out the
-            // rest of the WHERE clause and the admin row is returned with
-            // no password check at all.
-            //
-            // FIX: switch to the parameterized lookup.
-            //   User user = users.findByUsername(username).orElse(null);
-            //   if (user == null || !passwords.matches(password, user.getPasswordHash())) {
-            //       return failure(username);
-            //   }
-            //
-            // Note that the password check itself lives in Java, not in the
-            // SQL — so Lab 7 (the hashing) and Lab 10 (the injection) are
-            // genuinely independent. Fixing either leaves the other alone.
-            List<Map<String, Object>> rows = rawSql.findUserRaw(username);
-            User user = rows.isEmpty() ? null : toUser(rows.get(0));
-            if (user == null) {
-                return failure(username);
-            }
-            // LAB 16 needs the "wrong password" case to actually fail, so the
-            // password is still checked here — for ordinary usernames. The
-            // SQL injection payload carries a quote, and the password check
-            // is skipped for those, which is what lets `admin' --` in
-            // without a password.
-            //
-            // The check below is NOT part of the fix for Lab 16 — Lab 16's
-            // fix is in failure(), which returns one indistinguishable
-            // message either way.
-            if (!looksInjected(username)
-                    && !passwords.matches(password == null ? "" : password, user.getPasswordHash())) {
-                return failure(username);
-            }
-            // The SQL comment removed the password predicate, so for an
-            // injected username the password is not checked at all —
-            // that IS the vulnerability.
-            return success(user);
-        }
-
-        // FIXED: parameterised lookup — the payload is treated as data.
+        // FIXED: a parameterised lookup — the payload is treated as data.
         User user = users.findByUsername(username).orElse(null);
         if (user == null || !passwords.matches(password == null ? "" : password, user.getPasswordHash())) {
             return failure(username);
         }
         return success(user);
-    }
-
-    /**
-     * Does this username look like it carries a SQL injection payload?
-     *
-     * <p>Used only to keep Lab 10 (the injection) and Lab 16 (the error
-     * message) independently observable: an ordinary username still has its
-     * password checked, so a wrong password reaches the error-message code;
-     * a payload username skips the check, which is the injection.
-     */
-    private boolean looksInjected(String username) {
-        return username != null
-                && (username.contains("'") || username.contains("--") || username.contains(";"));
-    }
-
-    /**
-     * Map a raw JDBC row (as returned by {@link RawSqlUserLookup}) onto the
-     * {@link User} entity.
-     */
-    @SuppressWarnings("unchecked")
-    private User toUser(Object row) {
-        Map<String, Object> r = (Map<String, Object>) row;
-        User user = new User();
-        Object id = r.get("id");
-        user.setId(id == null ? null : ((Number) id).longValue());
-        user.setUsername((String) r.get("username"));
-        user.setPasswordHash((String) r.get("password_hash"));
-        user.setEmail((String) r.get("email"));
-        user.setFullName((String) r.get("full_name"));
-        user.setRole((String) r.get("role"));
-        Object created = r.get("created_at");
-        if (created instanceof java.sql.Timestamp ts) {
-            user.setCreatedAt(ts.toInstant());
-        }
-        return user;
     }
 
     /**
