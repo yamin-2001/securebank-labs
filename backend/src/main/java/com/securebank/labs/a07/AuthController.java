@@ -5,8 +5,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import com.securebank.core.LabToggles;
-import com.securebank.core.Md5Hasher;
 import com.securebank.core.PasswordHasher;
 import com.securebank.domain.PasswordResetToken;
 import com.securebank.domain.User;
@@ -28,8 +26,8 @@ import org.springframework.web.bind.annotation.RestController;
  * <ul>
  *   <li><strong>LAB 10 (FIXED)</strong> (A05) — SQL injection / login bypass</li>
  *   <li><strong>LAB 16 (FIXED)</strong> (A06) — account enumeration via error messages</li>
- *   <li><strong>LAB 17</strong> (A07) — no rate limiting</li>
- *   <li><strong>LAB 19</strong> (A07) — predictable password reset token</li>
+ *   <li><strong>LAB 17 (FIXED)</strong> (A07) — no rate limiting</li>
+ *   <li><strong>LAB 19 (FIXED)</strong> (A07) — predictable password reset token</li>
  * </ul>
  *
  * <p>Each of those labs lives in its own method, so fixing one does not
@@ -41,22 +39,18 @@ public class AuthController {
 
     private final UserRepository users;
     private final PasswordResetTokenRepository resetTokens;
-    private final Md5Hasher md5;
     private final PasswordHasher passwords;
     private final LabJwtService jwt;
-    private final LabToggles labs;
     private final LoginAttemptService attempts;
 
     public AuthController(UserRepository users, PasswordResetTokenRepository resetTokens,
-                          Md5Hasher md5, PasswordHasher passwords,
-                          LabJwtService jwt, LabToggles labs,
+                          PasswordHasher passwords,
+                          LabJwtService jwt,
                           LoginAttemptService attempts) {
         this.users = users;
         this.resetTokens = resetTokens;
-        this.md5 = md5;
         this.passwords = passwords;
         this.jwt = jwt;
-        this.labs = labs;
         this.attempts = attempts;
     }
 
@@ -145,31 +139,24 @@ public class AuthController {
     /**
      * Request a password reset.
      *
-     * <p><strong>LAB 19 (VULNERABLE):</strong> the token is
-     * {@code md5(username + unixTimestamp)}. An attacker who knows only the
-     * username and the approximate request time can recompute it offline.
+     * <p><strong>LAB 19 (FIXED):</strong> the token used to be
+     * {@code md5(username + unixTimestamp)}. An attacker who knew only the
+     * username and the approximate request time could recompute it offline.
      *
-     * <p>The token is also returned in the response body, for lab convenience.
-     *
-     * <p><strong>FIX:</strong> use {@code secrets.token_urlsafe(32)}, store it
-     * with a short expiry, and mark it used after a single redemption. The
-     * response should not contain the token at all in production.
+     * <p>The token is now cryptographically random, stored with a short
+     * expiry, and marked used after a single redemption. It is returned in
+     * the response body for lab convenience; in production it would only be
+     * emailed.
      */
     @PostMapping("/reset-request")
     public ResponseEntity<Map<String, Object>> resetRequest(@RequestBody Map<String, String> body) {
         String username = body.get("username");
 
-        String token;
-        if (labs.isEnabled("resettoken")) {
-            // LAB 19 (VULNERABLE): predictable token.
-            //
-            // FIX: token = secrets.token_urlsafe(32);
-            token = md5.hex(username + (System.currentTimeMillis() / 1000));
-        } else {
-            // FIXED: cryptographically random, stored, single-use, time-limited.
-            token = java.util.UUID.randomUUID().toString()
-                    .replace("-", "") + java.util.UUID.randomUUID().toString().replace("-", "");
-        }
+        // 32 bytes from a CSPRNG — not derived from anything the attacker
+        // can know or guess.
+        byte[] random = new byte[32];
+        new java.security.SecureRandom().nextBytes(random);
+        String token = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(random);
 
         PasswordResetToken record = new PasswordResetToken();
         record.setUsername(username);
