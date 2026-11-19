@@ -1,8 +1,11 @@
 # SecureBank Labs — a deliberately vulnerable banking app with 25 OWASP labs.
 #
-# The rule that makes this work: a toggle ARMS a lab, it is never the fix.
-# `lab.<slug>=true` in application.yml stays true after you fix the lab —
-# the fix is a code change at the location the lab panel names.
+# The rule that makes this work: a lab is fixed by changing code, and by
+# nothing else. There are no flags — each lab's vulnerability is a single
+# code path, and fixing it means replacing that code.
+#
+# `main` is the vulnerable build. `fixed` is the same app with every lab
+# repaired, one small commit per lab.
 
 .DEFAULT_GOAL := help
 .PHONY: help up down reset run stop build verify verify-fixed verify-all \

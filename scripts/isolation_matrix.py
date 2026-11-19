@@ -26,7 +26,7 @@ BACKEND = ROOT / "backend"
 JAVA = BACKEND / "src/main/java/com/securebank"
 
 # Each entry: lab id -> (file, old snippet, new snippet).
-# The "fixed" snippet replaces the vulnerable branch with the fixed one.
+# The "fixed" snippet replaces the vulnerable code with the fixed code.
 FIXES: dict[int, tuple[str, str, str]] = {}
 
 
@@ -38,8 +38,12 @@ def _fix(lab_id, path, old, new):
 _fix(
     1,
     JAVA / "labs/a01/AccountService.java",
-    '        if (labs.isEnabled("idor")) {',
-    '        if (labs.isEnabled("idor") && false) {',
+    """        // No ownership check — this returns any account by id.
+        return account;""",
+    """        if (callerUserId == null || !java.util.Objects.equals(account.getOwnerId(), callerUserId)) {
+            throw new AccountForbiddenException("You do not own account " + id);
+        }
+        return account;""",
 )
 
 # --- Lab 2: require the ADMIN role --------------------------------------
@@ -54,77 +58,239 @@ _fix(
 _fix(
     3,
     JAVA / "labs/a01/SsrfStatementService.java",
-    '        if (labs.isEnabled("ssrf")) {',
-    '        if (labs.isEnabled("ssrf") && false) {',
+    """        // The server fetches any URL the caller names.
+        body.put("status", "sent");""",
+    """        if (!isAllowedCallback(uri)) {
+            body.put("status", "rejected");
+            body.put("error", "callback_url is not allowed");
+            return body;
+        }
+
+        body.put("status", "sent");""",
 )
 
 # --- Lab 4: stop leaking the secrets in the exception message ----------
 _fix(
     4,
     JAVA / "labs/a02/DebugLeakController.java",
-    '        if (labs.isEnabled("debugtrace")) {',
-    '        if (labs.isEnabled("debugtrace") && false) {',
+    """        // The exception message carries the secrets.
+        throw new IllegalStateException(
+                "diagnostic failure while loading profile [" + detail + "]"
+                        + " -- jwt signing secret=" + JwtKeys.HARDCODED_SECRET
+                        + " jdbc url=jdbc:postgresql://localhost:5432/securebank"
+                        + " db user=securebank db password=securebank");""",
+    """        // FIXED: the endpoint is gone. A debug endpoint has no business
+        // existing in production, and the detail is not echoed back either.
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error", "debug endpoint is disabled");
+        return ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).body(body);""",
 )
 
 # --- Lab 5: no default credentials ---------------------------------------
 _fix(
     5,
     JAVA / "labs/a02/AdminPanelController.java",
-    '        if (labs.isEnabled("admincreds")) {',
-    '        if (labs.isEnabled("admincreds") && false) {',
+    """        // The shipped default credentials always work.
+        if (DEFAULT_USERNAME.equals(username) && DEFAULT_PASSWORD.equals(password)) {
+            Map<String, Object> ok = new LinkedHashMap<>();
+            ok.put("authenticated", true);
+            ok.put("username", username);
+            ok.put("role", "admin");
+            ok.put("session", "admin-panel-session-token");
+            return ResponseEntity.ok(ok);
+        }
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of("error", "Invalid credentials"));""",
+    """        User user = username == null ? null : users.findByUsername(username).orElse(null);
+        if (user == null || password == null
+                || !passwords.matches(password, user.getPasswordHash())) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Invalid credentials"));
+        }
+        Map<String, Object> ok = new LinkedHashMap<>();
+        ok.put("authenticated", true);
+        ok.put("username", user.getUsername());
+        ok.put("role", user.getRole());
+        ok.put("session", "admin-panel-session-token");
+        return ResponseEntity.ok(ok);""",
 )
 
 # --- Lab 8: read the secret from the environment ------------------------
 _fix(
     8,
     JAVA / "security/JwtKeys.java",
-    '        if (labs.isEnabled("jwtsecret")) {\n'
-    '            // LAB 8 (VULNERABLE): the secret is a literal in the source tree.',
-    '        if (labs.isEnabled("jwtsecret") && false) {\n'
-    '            // LAB 8 (VULNERABLE): the secret is a literal in the source tree.',
+    """    public static String secret() {
+        return HARDCODED_SECRET;
+    }""",
+    """    public static String secret() {
+        String fromEnv = System.getenv(SECRET_ENV_VAR);
+        if (fromEnv != null && !fromEnv.isBlank()) {
+            return fromEnv;
+        }
+        String fromProperty = System.getProperty(SECRET_PROPERTY);
+        if (fromProperty != null && !fromProperty.isBlank()) {
+            return fromProperty;
+        }
+        return fallbackSecret;
+    }""",
 )
+# Lab 8 also needs the random fallback and the property name.
+FIXES[8] = [FIXES[8], (
+    JAVA / "security/JwtKeys.java",
+    """    /** Where a real deployment would read the secret from. */
+    public static final String SECRET_ENV_VAR = "APP_JWT_SECRET";""",
+    """    /** Where a real deployment would read the secret from. */
+    public static final String SECRET_ENV_VAR = "APP_JWT_SECRET";
+
+    /** The system-property equivalent of {@link #SECRET_ENV_VAR}. */
+    public static final String SECRET_PROPERTY = "app.jwt-secret";""",
+), (
+    JAVA / "security/JwtKeys.java",
+    """    private static final String fallbackSecret =
+            "no-secret-configured-" + java.util.UUID.randomUUID();""",
+    """    private static final String fallbackSecret = randomSecret();
+
+    /** A random secret, held for the lifetime of the process. */
+    private static String randomSecret() {
+        byte[] bytes = new byte[32];
+        new java.security.SecureRandom().nextBytes(bytes);
+        return java.util.Base64.getEncoder().encodeToString(bytes);
+    }""",
+), (
+    JAVA / "security/JwtKeys.java",
+    """    /** LAB 8 (VULNERABLE): logged at startup so anyone with log access can read it. */
+    public static void logSecretAtStartup(org.slf4j.Logger log) {
+        log.warn("JWT signing secret is: {}", secret());
+    }""",
+    """    /** LAB 8 (FIXED): the secret is no longer written to the log. */
+    public static void logSecretAtStartup(org.slf4j.Logger log) {
+        log.info("JWT signing secret loaded from the environment");
+    }""",
+)]
 
 # --- Lab 9: mask the PII ------------------------------------------------
 _fix(
     9,
     JAVA / "labs/a04/CryptoLeakController.java",
-    '        if (labs.isEnabled("pii")) {',
-    '        if (labs.isEnabled("pii") && false) {',
+    """        body.put("full_name", user.getFullName());
+        body.put("email", user.getEmail());
+        body.put("account_number", "ACC-1001");
+        body.put("sort_code", "20-00-00");""",
+    """        body.put("full_name", maskName(user.getFullName()));
+        body.put("email", maskEmail(user.getEmail()));
+        body.put("account_number", "ACC-****1001");
+        body.put("sort_code", "20-**-**");""",
 )
+
+# Lab 9's fix also needs the two masking helpers.
+FIXES[9] = [FIXES[9], (
+    JAVA / "labs/a04/CryptoLeakController.java",
+    """    private static final Logger log = LoggerFactory.getLogger(CryptoLeakController.class);""",
+    """    private static final Logger log = LoggerFactory.getLogger(CryptoLeakController.class);
+
+    /** Mask a name: keep the first character, hide the rest. */
+    private static String maskName(String name) {
+        if (name == null || name.isBlank()) {
+            return null;
+        }
+        return name.charAt(0) + "*".repeat(Math.max(0, name.length() - 1));
+    }
+
+    /** Mask an email: keep the first character of the local part. */
+    private static String maskEmail(String email) {
+        if (email == null || !email.contains("@")) {
+            return null;
+        }
+        String local = email.substring(0, email.indexOf('@'));
+        return local.charAt(0) + "***" + email.substring(email.indexOf('@'));
+    }""",
+)]
 
 # --- Lab 10: parameterise the SQL ---------------------------------------
 # Lab 10 lives in two places: the transfer search and the login query.
 _fix(
     10,
     JAVA / "labs/a05/InjectionController.java",
-    '        if (labs.isEnabled("sqli")) {',
-    '        if (labs.isEnabled("sqli") && false) {',
+    """        String sql = "SELECT id, from_account_id, to_account_id, amount, note, status"
+                + " FROM transfers WHERE note LIKE '%" + query + "%'";
+        return jdbc.queryForList(sql);""",
+    """        String sql = "SELECT id, from_account_id, to_account_id, amount, note, status"
+                + " FROM transfers WHERE note LIKE ?";
+        return jdbc.queryForList(sql, "%" + query + "%");""",
 )
 FIXES[10] = [FIXES[10], (
     JAVA / "labs/a07/AuthController.java",
-    '        if (labs.isEnabled("sqli")) {',
-    '        if (labs.isEnabled("sqli") && false) {',
+    """        List<Map<String, Object>> rows = rawSql.findUserRaw(username);
+        User user = rows.isEmpty() ? null : toUser(rows.get(0));
+        if (user == null) {
+            return failure(username);
+        }""",
+    """        User user = users.findByUsername(username).orElse(null);
+        if (user == null) {
+            return failure(username);
+        }""",
 )]
 
 # --- Lab 11: bind the remark as a variable, not an expression -----------
 _fix(
     11,
     JAVA / "labs/a05/SstiRemarkController.java",
-    '        if (labs.isEnabled("ssti")) {',
-    '        if (labs.isEnabled("ssti") && false) {',
+    """            return parser.parseExpression(remark)
+                    .getValue(new StandardEvaluationContext(), String.class);""",
+    """            StandardEvaluationContext context = new StandardEvaluationContext();
+            context.setVariable("remark", remark);
+            return parser.parseExpression("#remark").getValue(context, String.class);""",
 )
 
 # --- Lab 12: parse the template, and pass the date as an argument -------
 _fix(
     12,
     JAVA / "labs/a05/ReportController.java",
-    '        if (labs.isEnabled("ssti")) {',
-    '        if (labs.isEnabled("ssti") && false) {',
+    """        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("account_id", body.get("account_id"));
+        out.put("report", renderTemplateVulnerable(body.get("template")));
+        return out;""",
+    """        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("account_id", body.get("account_id"));
+        out.put("report", renderTemplateFixed(body.get("account_id")));
+        return out;""",
 )
 FIXES[12] = [FIXES[12], (
     JAVA / "labs/a05/ReportController.java",
-    '        if (labs.isEnabled("cmdinject")) {',
-    '        if (labs.isEnabled("cmdinject") && false) {',
+    """        out.put("command_output", runShell(
+                "date -d '" + from + "' '+%Y-%m-%d' && date -d '" + to + "' '+%Y-%m-%d'"));""",
+    """        out.put("command_output", runCommand(
+                List.of("date", "-d", from, "+%Y-%m-%d")));""",
+), (
+    # Lab 12's fix needs the two helpers it calls.
+    JAVA / "labs/a05/ReportController.java",
+    """    /** LAB 12 (VULNERABLE): parse the caller's template. */
+    private String renderTemplateVulnerable(String template) {""",
+    """    /** The template is a constant; the account id is a variable. */
+    private String renderTemplateFixed(String accountId) {
+        StandardEvaluationContext context = new StandardEvaluationContext();
+        context.setVariable("accountId", accountId);
+        return parser.parseExpression(
+                        "'Statement for account ' + #accountId + ' — balance 4200.00 GBP'")
+                .getValue(context, String.class);
+    }
+
+    /** Run a command with separate arguments, no shell. */
+    private String runCommand(List<String> command) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(command);
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+            String output = read(process);
+            process.waitFor(10, TimeUnit.SECONDS);
+            return output.trim();
+        } catch (IOException | InterruptedException e) {
+            return "command failed: " + e.getMessage();
+        }
+    }
+
+    /** LAB 12 (VULNERABLE): parse the caller's template. */
+    private String renderTemplateVulnerable(String template) {""",
 )]
 
 # --- Lab 6: take the sensitive files off the web root -------------------
@@ -272,47 +438,69 @@ def lab7_seed_block() -> str:
 _fix(
     7,
     JAVA / "core/PasswordHasher.java",
-    '        if (labs.isEnabled("md5hash")) {',
-    '        if (labs.isEnabled("md5hash") && false) {',
+    """    public String hash(String password) {
+        return md5Hex(password == null ? "" : password);
+    }""",
+    """    public String hash(String password) {
+        byte[] salt = new byte[16];
+        new java.security.SecureRandom().nextBytes(salt);
+        String saltB64 = java.util.Base64.getEncoder().encodeToString(salt);
+        String hash = pbkdf2(password == null ? "" : password, saltB64);
+        return "pbkdf2-sha256$" + 100_000 + "$" + saltB64 + "$" + hash;
+    }""",
 )
 
 # --- Lab 13: escape the note -------------------------------------------
 _fix(
     13,
     JAVA / "labs/a05/NoteRenderer.java",
-    """        if (labs.isEnabled("xss")) {
-            // LAB 13 (VULNERABLE): raw interpolation. The note becomes markup.
-            //
-            // FIX: use renderFixed(note) below.
-            return "<div class=\\"txn-note\\">" + (note == null ? "" : note) + "</div>";
-        }""",
-    """        if (false) {
-            return "<div class=\\"txn-note\\">" + (note == null ? "" : note) + "</div>";
-        }""",
+    """        return "<div class=\\"txn-note\\">" + (note == null ? "" : note) + "</div>";""",
+    """        String escaped = org.springframework.web.util.HtmlUtils.htmlEscape(note == null ? "" : note);
+        return "<div class=\\"txn-note\\">" + escaped + "</div>";""",
 )
 
 # --- Lab 14: validate the amount ----------------------------------------
 _fix(
     14,
     JAVA / "labs/a06/TransferService.java",
-    "        if (labs.isEnabled(\"negativetransfer\")) {",
-    "        if (labs.isEnabled(\"negativetransfer\") && false) {",
+    """        from.setBalance(from.getBalance().add(amount));
+        to.setBalance(to.getBalance().add(amount));""",
+    """        if (amount == null) {
+            throw new TransferException("Amount is required");
+        }
+        if (amount.signum() <= 0) {
+            throw new TransferException("Amount must be positive");
+        }
+        if (java.util.Objects.equals(fromAccountId, toAccountId)) {
+            throw new TransferException("Cannot transfer to the same account");
+        }
+        if (from.getBalance().compareTo(amount) < 0) {
+            throw new TransferException("Insufficient funds");
+        }
+
+        from.setBalance(from.getBalance().subtract(amount));
+        to.setBalance(to.getBalance().add(amount));""",
 )
 
 # --- Lab 15: ignore the role field --------------------------------------
 _fix(
     15,
     JAVA / "labs/a06/ProfileController.java",
-    "        if (labs.isEnabled(\"massassign\")) {",
-    "        if (labs.isEnabled(\"massassign\") && false) {",
+    """        if (body.containsKey("role")) {
+            user.setRole(String.valueOf(body.get("role")));
+        }""",
+    """        // `role` is never read from the request body — a role change is a
+        // privileged operation and belongs on a separate, admin-only
+        // endpoint.""",
 )
 
 # --- Lab 16: one indistinguishable message ------------------------------
 _fix(
     16,
     JAVA / "labs/a07/AuthController.java",
-    "        if (labs.isEnabled(\"userenum\")) {",
-    "        if (labs.isEnabled(\"userenum\") && false) {",
+    """        boolean exists = users.findByUsername(username).isPresent();
+        body.put("error", exists ? "Incorrect password" : "User not found");""",
+    """        body.put("error", "Invalid credentials");""",
 )
 
 # --- Lab 17: enforce the attempt budget ---------------------------------
@@ -327,41 +515,33 @@ _fix(
 FIXES[17] = [
     (
         JAVA / "labs/a07/LoginAttemptService.java",
-        """        // LAB 17 (VULNERABLE): nothing is counted and nothing is refused.
-        //
-        // FIX: the two lines below are the fix.
-        //
-        //   if (isBlocked(username)) {
-        //       throw new TooManyAttemptsException(username);
-        //   }
-        //
-        // and call recordFailure(username) on a failed login and
-        // recordSuccess(username) on a successful one.""",
-        """        if (isBlocked(username)) {
+        """    public void applyRateLimit(String username) {
+    }""",
+        """    public void applyRateLimit(String username) {
+        if (isBlocked(username)) {
             throw new TooManyAttemptsException(username);
-        }""",
+        }
+    }""",
     ),
     # The second edit: a failed login counts towards the budget.
     (
         JAVA / "labs/a07/AuthController.java",
         """        // LAB 17: a failed attempt should count towards the account's budget.
-        //
-        // FIX: attempts.recordFailure(username);""",
+        Map<String, Object> body = new LinkedHashMap<>();""",
         """        // LAB 17: a failed attempt should count towards the account's budget.
-        //
-        // FIX: attempts.recordFailure(username);
-        attempts.recordFailure(username);""",
+        attempts.recordFailure(username);
+        Map<String, Object> body = new LinkedHashMap<>();""",
     ),
     # The third edit: a successful login clears the counter.
     (
         JAVA / "labs/a07/AuthController.java",
-        """        // LAB 17: a successful login should clear the account's counter.
-        //
-        // FIX: attempts.recordSuccess(user.getUsername());""",
-        """        // LAB 17: a successful login should clear the account's counter.
-        //
-        // FIX: attempts.recordSuccess(user.getUsername());
-        attempts.recordSuccess(user.getUsername());""",
+        """    private ResponseEntity<Map<String, Object>> success(User user) {
+        // LAB 17: a successful login should clear the account's counter.
+        String token""",
+        """    private ResponseEntity<Map<String, Object>> success(User user) {
+        // LAB 17: a successful login should clear the account's counter.
+        attempts.recordSuccess(user.getUsername());
+        String token""",
     ),
 ]
 
@@ -369,41 +549,120 @@ FIXES[17] = [
 _fix(
     18,
     JAVA / "labs/a07/SessionLoginController.java",
-    '        if (labs.isEnabled("sessionfixation")) {',
-    '        if (labs.isEnabled("sessionfixation") && false) {',
+    """        // LAB 18 (VULNERABLE): the session id is NOT rotated. The id the
+        // attacker planted before the victim logged in is now an
+        // authenticated session.
+""",
+    """        // LAB 18 (FIXED): rotate the id now that the session carries the
+        // authenticated attributes. The rotation carries them across to the
+        // new session, so the caller stays logged in.
+        session = rotateSessionId(request, session);
+""",
 )
+FIXES[18] = [FIXES[18], (
+    # Lab 18's fix needs the rotation helper it calls.
+    JAVA / "labs/a07/SessionLoginController.java",
+    """    /**
+     * Establish a session before logging in.""",
+    """    /**
+     * Rotate the session id at the moment of authentication.
+     *
+     * <p>The old session is invalidated and a brand-new one is created, with
+     * the authenticated attributes carried across.
+     */
+    private HttpSession rotateSessionId(HttpServletRequest request, HttpSession session) {
+        Object userId = session.getAttribute("user_id");
+        Object username = session.getAttribute("username");
+        Object role = session.getAttribute("role");
+
+        session.invalidate();
+
+        HttpSession fresh = request.getSession(true);
+        fresh.setAttribute("user_id", userId);
+        fresh.setAttribute("username", username);
+        fresh.setAttribute("role", role);
+        return fresh;
+    }
+
+    /**
+     * Establish a session before logging in.""",
+)]
 
 # --- Lab 19: a random reset token ---------------------------------------
 _fix(
     19,
     JAVA / "labs/a07/AuthController.java",
-    "        if (labs.isEnabled(\"resettoken\")) {",
-    "        if (labs.isEnabled(\"resettoken\") && false) {",
+    """        // LAB 19 (VULNERABLE): predictable token.
+        String token = md5.hex(username + (System.currentTimeMillis() / 1000));""",
+    """        // LAB 19 (FIXED): unpredictable, single-use and expiring.
+        byte[] bytes = new byte[32];
+        new java.security.SecureRandom().nextBytes(bytes);
+        String token = java.util.Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(bytes);""",
 )
 
 # --- Lab 20: do not deserialize untrusted bytes -------------------------
-# The fix replaces the ObjectInputStream with a data-only parse.
 _fix(
     20,
     JAVA / "labs/a08/IntegrityController.java",
-    "        if (labs.isEnabled(\"deserialization\")) {",
-    "        if (labs.isEnabled(\"deserialization\") && false) {",
+    """        try (InputStream raw = file.getInputStream();
+             ObjectInputStream in = new ObjectInputStream(raw)) {
+            Object object = in.readObject();
+            out.put("message", "Account imported");
+            out.put("type", object == null ? "null" : object.getClass().getName());
+            return ResponseEntity.ok(out);
+        } catch (IOException | ClassNotFoundException e) {
+            out.put("error", "Could not read the import file");
+            out.put("detail", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(out);
+        }""",
+    """        try {
+            String body = new String(file.getBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            out.put("message", "Account imported");
+            out.put("mode", "safe-json");
+            out.put("bytes", body.length());
+            return ResponseEntity.ok(out);
+        } catch (IOException e) {
+            out.put("error", "Could not read the import file");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(out);
+        }""",
 )
 
 # --- Lab 21: pin the algorithm and verify the signature -----------------
 _fix(
     21,
     JAVA / "security/LabJwtService.java",
-    "        if (labs.isEnabled(\"jwtalgnone\") && declaresAlgNone(token)) {",
-    "        if (labs.isEnabled(\"jwtalgnone\") && declaresAlgNone(token) && false) {",
+    """        if (declaresAlgNone(token)) {
+            return parseWithoutAlgorithmCheck(token);
+        }
+        // Lab 8 default: pin HS256 and verify the signature.
+        return secureParser.parse(token);""",
+    """        // FIXED: jjwt pins the algorithm and verifies the signature.
+        // parseSignedClaims rejects alg:none and every algorithm other than
+        // HS256, so the vulnerable branch is gone.
+        return secureParser.parse(token);""",
 )
 
 # --- Lab 22: a server-generated name, outside the web root ---------------
 _fix(
     22,
     JAVA / "labs/a08/IntegrityController.java",
-    "        if (labs.isEnabled(\"upload\")) {",
-    "        if (labs.isEnabled(\"upload\") && false) {",
+    """            Files.createDirectories(UPLOAD_DIR);
+            Path target = UPLOAD_DIR.resolve(originalName == null ? "upload.bin" : originalName);
+            Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+
+            out.put("message", "Upload stored");
+            out.put("stored_as", target.getFileName().toString());
+            out.put("location", "/uploads/" + target.getFileName());
+            out.put("content_type", contentTypeFor(originalName));""",
+    """            String stored = java.util.UUID.randomUUID() + ".bin";
+            Path target = Paths.get("var", "kyc", stored);
+            Files.createDirectories(target.getParent());
+            Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+
+            out.put("message", "Upload stored");
+            out.put("stored_as", stored);
+            out.put("location", "/kyc/" + stored);""",
 )
 
 # --- Lab 23: validate the input at the boundary -------------------------
@@ -411,41 +670,60 @@ _fix(
 _fix(
     23,
     JAVA / "labs/a10/VerboseErrorController.java",
-    '        if (labs.isEnabled("verboseerror")) {',
-    '        if (labs.isEnabled("verboseerror") && false) {',
+    """        int accountId = Integer.parseInt(id);
+        Map<String, Object> out = new LinkedHashMap<>();""",
+    """        int accountId;
+        try {
+            accountId = Integer.parseInt(id);
+        } catch (NumberFormatException e) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", "The account id must be a number"));
+        }
+        Map<String, Object> out = new LinkedHashMap<>();""",
 )
 FIXES[23] = [FIXES[23], (
     JAVA / "labs/a10/VerboseErrorController.java",
-    '        if (labs.isEnabled("verboseerror") && raw instanceof String) {',
-    '        if (labs.isEnabled("verboseerror") && raw instanceof String && false) {',
+    """        int accountId = Integer.parseInt(String.valueOf(raw));
+        return ResponseEntity.ok(Map.of("account_id", accountId, "currency", "GBP"));""",
+    """        int accountId;
+        try {
+            accountId = Integer.parseInt(String.valueOf(raw));
+        } catch (NumberFormatException e) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", "The account id must be a number"));
+        }
+        return ResponseEntity.ok(Map.of("account_id", accountId, "currency", "GBP"));""",
 )]
 
 # --- Lab 24: do not return the deserializer's message -------------------
 _fix(
     24,
     JAVA / "labs/a10/CoercionController.java",
-    '        if (labs.isEnabled("typecoercion")) {',
-    '        if (labs.isEnabled("typecoercion") && false) {',
+    """        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("error", "Could not read the request body");
+        out.put("detail", ex.getMessage());
+        out.put("cause", ex.getCause() == null ? null : ex.getCause().toString());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(out);""",
+    """        org.slf4j.LoggerFactory.getLogger(CoercionController.class)
+                .warn("Rejected a malformed transfer body", ex);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("error", "The request body was malformed"));""",
 )
 
 # --- Lab 25: fail closed -------------------------------------------------
 # The fix is to return 401 instead of falling through to the default
-# identity. The `labs.isEnabled("failopen")` guard goes with it, so the
-# default identity can never be reached.
+# identity.
 _fix(
     25,
     JAVA / "security/LabAuthFilter.java",
-    """        if (userId == null && labs.isEnabled("failopen")
-                && header != null && header.startsWith("Bearer ")) {
+    """        if (userId == null && header != null && header.startsWith("Bearer ")) {
             userId = 1L;
             role = "admin";
             username = "admin";
         }""",
-    """        if (userId == null && labs.isEnabled("failopen") && false
-                && header != null && header.startsWith("Bearer ")) {
-            userId = 1L;
-            role = "admin";
-            username = "admin";
+    """        if (userId == null && header != null && header.startsWith("Bearer ")) {
+            unauthorized(res);
+            return;
         }""",
 )
 

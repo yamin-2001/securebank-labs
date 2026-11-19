@@ -34,23 +34,31 @@ to check your work.
 
 ## The one rule
 
-> **A toggle arms a lab. It is never the fix.**
+> **A lab is fixed by changing code, and by nothing else.**
 
-Every lab has a flag in `backend/src/main/resources/application.yml`:
+There are no flags to flip. Each lab's vulnerability lives in one method,
+on one code path, and that path is the only path — the vulnerable code is
+the shipped code, with no switch next to it. **Fixing a lab means replacing
+that code** with the correct version.
 
-```yaml
-lab:
-  idor: true
-```
+That is what lets the harness assert on behaviour instead of on
+configuration: the same exploit succeeds before your fix and fails after
+it, with nothing but a code change in between.
 
-The keys are flat — `lab.<slug>`, one boolean per lab. `true` means *this
-vulnerability is live*. **Fixing a lab means changing code** — the flag
-stays `true`. That is what lets the harness assert on behaviour instead of
-on configuration: the same exploit succeeds before your fix and fails after
-it, with no flag change in between.
+If you find yourself looking for a switch to flip, you have not fixed
+anything.
 
-If you find yourself flipping a toggle to make a check pass, you have not
-fixed anything.
+### Two branches
+
+| Branch | What it is |
+| --- | --- |
+| `main` | The shipped **vulnerable** app. Every lab is exploitable. |
+| `fixed` | The same app with every lab fixed, one small commit per lab. |
+
+`git switch main` to work on the labs; `git switch fixed` to see what a
+complete set of fixes looks like. The commits on `fixed` are deliberately
+small — `lab-01 fixed`, `lab-02 fixed`, and so on — so you can read one
+lab's fix at a time, or cherry-pick a single one.
 
 ---
 
@@ -115,15 +123,15 @@ The **Labs** panel in the app (top right) shows the same metadata as
 
 ```bash
 python3 verify/run.py --list              # the catalogue
-python3 verify/run.py --show 13           # title, OWASP, endpoints, toggle, fix location
+python3 verify/run.py --show 13           # title, OWASP, endpoints, fix location
 python3 verify/run.py --lab 13            # run one check
 python3 verify/run.py --all --expect vulnerable
 python3 verify/run.py --all --expect fixed
 ```
 
 `--show` prints a lab's **metadata** — title, OWASP category, severity,
-endpoints, the toggle that arms it, and the file and method to fix. The
-exploit steps and the hint live in [`WALKTHROUGH.md`](WALKTHROUGH.md).
+endpoints, and the file and method to fix. The exploit steps and the hint
+live in [`WALKTHROUGH.md`](WALKTHROUGH.md).
 
 Every check returns one of three verdicts:
 
@@ -236,14 +244,14 @@ securebank-labs/
 │   ├── pom.xml  mvnw  mvnw.cmd     maven wrapper (3.10.0)
 │   │
 │   ├── src/main/java/com/securebank/
-│   │   ├── core/        LabToggles, AuthContext, PasswordHasher, error handling
+│   │   ├── core/        AuthContext, PasswordHasher, error handling
 │   │   ├── domain/      User, Account, Transfer + JPA repositories
 │   │   ├── security/    SecurityConfig, LabAuthFilter, LabJwtService, JwtKeys
 │   │   ├── labs/        a01/ a02/ a04/ a05/ a06/ a07/ a08/ a10/ — the 25 labs
 │   │   └── ui/          HealthController, LabStateController
 │   │
 │   ├── src/main/resources/
-│   │   ├── application.yml             the 25 lab toggles + the weakened settings
+│   │   ├── application.yml             the weakened settings (verbose errors, etc.)
 │   │   ├── schema.sql  data.sql        idempotent schema and seed
 │   │   └── static/                     the Lab 6 files: .env, git-config-fixture/, backup.zip
 │   │
@@ -272,12 +280,9 @@ securebank-labs/
 
 A few decisions that are not obvious from the code:
 
-**The lab toggles are flat.** `LabToggles` reads the property `lab.<slug>`
-directly — there is no `.enabled` sub-level. `lab.idor.enabled` resolves to
-the default `false` and silently *disarms* the lab, which is the opposite
-of what it looks like. Two toggles (`lab.privesc`, `lab.filedisclosure`)
-are decorative: those two labs live in the security filter chain rather
-than behind a runtime check, so they are live whatever the flag says.
+**There are no toggles.** The vulnerable build is one code path per
+method, with no switch beside it. `main` is that build; `fixed` is the
+same app with every lab repaired, one small commit per lab.
 
 **Spring Security is on the classpath, deliberately weakened.** Its
 defaults would neutralise several labs — the `NimbusJwtDecoder` rejects
@@ -344,12 +349,10 @@ should answer `{"status":"up"}`.
 `--expect vulnerable`: it asserts the *shipped* build is vulnerable. Use
 `--expect fixed` for your own build.
 
-**A lab I fixed still reports `VULNERABLE`.** Check that you fixed the
-*code* and not the toggle — the toggle stays `true` by design. If the
-detail line shows the exploit still landing, the vulnerable branch is
-still being reached: several labs keep the fix in the same method as the
-vulnerability, behind an `if (labs.isEnabled(...))` guard, so the fix
-means deleting that branch, not editing the other one.
+**A lab I fixed still reports `VULNERABLE`.** The detail line says what
+the exploit observed. If it says the exploit still landed, the vulnerable
+code is still being reached — the fix has to replace the vulnerable line
+itself, not sit next to it.
 
 **Lab 13 reports `FIXED` but the browser is still exploitable.** Expected
 until you also fix `TransfersPage.tsx`. The harness checks the server's
