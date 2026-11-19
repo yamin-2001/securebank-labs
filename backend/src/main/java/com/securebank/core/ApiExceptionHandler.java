@@ -29,12 +29,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
-    private final LabToggles labs;
-
-    public ApiExceptionHandler(LabToggles labs) {
-        this.labs = labs;
-    }
-
     /**
      * LAB 23 (VULNERABLE): the generic handler leaks the stack trace,
      * the exception type and the message.
@@ -44,25 +38,17 @@ public class ApiExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleException(Exception ex) {
-        if (labs.isEnabled("verboseerror")) {
-            StringWriter stack = new StringWriter();
-            ex.printStackTrace(new PrintWriter(stack));
+        StringWriter stack = new StringWriter();
+        ex.printStackTrace(new PrintWriter(stack));
 
-            Map<String, Object> body = new LinkedHashMap<>();
-            body.put("timestamp", java.time.Instant.now().toString());
-            body.put("status", 500);
-            body.put("error", "Internal Server Error");
-            body.put("exception", ex.getClass().getName());
-            body.put("message", ex.getMessage());
-            body.put("stackTrace", stack.toString().split("\n"));
-            body.put("path", "");
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
-        }
-
-        // FIXED: a generic message; the detail goes to the server log.
-        org.slf4j.LoggerFactory.getLogger(ApiExceptionHandler.class)
-                .error("Unhandled exception", ex);
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "An internal error occurred"));
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("timestamp", java.time.Instant.now().toString());
+        body.put("status", 500);
+        body.put("error", "Internal Server Error");
+        body.put("exception", ex.getClass().getName());
+        body.put("message", ex.getMessage());
+        body.put("stackTrace", stack.toString().split("\n"));
+        body.put("path", "");
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
     }
 }

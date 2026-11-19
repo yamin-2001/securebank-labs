@@ -4,9 +4,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
-import com.securebank.core.LabToggles;
 import com.securebank.domain.Account;
 import com.securebank.domain.Transfer;
 import com.securebank.domain.repo.AccountRepository;
@@ -27,22 +25,16 @@ import org.springframework.transaction.annotation.Transactional;
  * bug: the check was never part of the design. The endpoint is not
  * injectable and the arithmetic is correct — the arithmetic is simply being
  * handed a value the design never considered.
- *
- * <p><strong>FIX:</strong> delete the vulnerable branch. The intended end
- * state validates that the amount is positive, that the accounts are
- * distinct, that the sender has the funds, and that the currency matches.
  */
 @Service
 public class TransferService {
 
     private final TransferRepository transfers;
     private final AccountRepository accounts;
-    private final LabToggles labs;
 
-    public TransferService(TransferRepository transfers, AccountRepository accounts, LabToggles labs) {
+    public TransferService(TransferRepository transfers, AccountRepository accounts) {
         this.transfers = transfers;
         this.accounts = accounts;
-        this.labs = labs;
     }
 
     /**
@@ -50,80 +42,16 @@ public class TransferService {
      *
      * <p><strong>LAB 14 (VULNERABLE):</strong> the amount is applied without
      * any validation.
-     *
-     * <p><strong>FIX:</strong> delete this branch and use
-     * {@link #sendFixed(Long, Long, BigDecimal, String, Long)}.
      */
     @Transactional
     public Transfer send(Long fromAccountId, Long toAccountId, BigDecimal amount,
                          String note, Long callerUserId) {
-        if (labs.isEnabled("negativetransfer")) {
-            // LAB 14 (VULNERABLE): no validation of the amount, the accounts
-            // or the balance. A negative amount is added to BOTH sides, so
-            // both balances shrink and the total money in the system
-            // changes.
-            //
-            // FIX: use sendFixed(...) below.
-            Account from = accounts.findById(fromAccountId)
-                    .orElseThrow(() -> new TransferException("No account with id " + fromAccountId));
-            Account to = accounts.findById(toAccountId)
-                    .orElseThrow(() -> new TransferException("No account with id " + toAccountId));
-
-            from.setBalance(from.getBalance().add(amount));
-            to.setBalance(to.getBalance().add(amount));
-            accounts.save(from);
-            accounts.save(to);
-
-            Transfer transfer = new Transfer();
-            transfer.setFromAccountId(fromAccountId);
-            transfer.setToAccountId(toAccountId);
-            transfer.setAmount(amount);
-            transfer.setNote(note);
-            transfer.setRemark(note);
-            transfer.setStatus("completed");
-            transfer.setCreatedBy(callerUserId);
-            transfer.setCreatedAt(Instant.now());
-            return transfers.save(transfer);
-        }
-
-        // ---- FIX (the intended final state) ----
-        return sendFixed(fromAccountId, toAccountId, amount, note, callerUserId);
-    }
-
-    /**
-     * ---- FIX (the intended final state) ----
-     *
-     * <p>The amount must be positive, the two accounts must differ, the
-     * sender must have the funds, and both accounts must use the same
-     * currency.
-     */
-    @Transactional
-    public Transfer sendFixed(Long fromAccountId, Long toAccountId, BigDecimal amount,
-                              String note, Long callerUserId) {
-        if (amount == null) {
-            throw new TransferException("Amount is required");
-        }
-        if (amount.signum() <= 0) {
-            throw new TransferException("Amount must be positive");
-        }
-        if (Objects.equals(fromAccountId, toAccountId)) {
-            throw new TransferException("Cannot transfer to the same account");
-        }
-
         Account from = accounts.findById(fromAccountId)
                 .orElseThrow(() -> new TransferException("No account with id " + fromAccountId));
         Account to = accounts.findById(toAccountId)
                 .orElseThrow(() -> new TransferException("No account with id " + toAccountId));
 
-        if (!Objects.equals(from.getCurrency(), to.getCurrency())) {
-            throw new TransferException("Currency mismatch: cannot transfer "
-                    + from.getCurrency() + " into " + to.getCurrency());
-        }
-        if (from.getBalance().compareTo(amount) < 0) {
-            throw new TransferException("Insufficient funds");
-        }
-
-        from.setBalance(from.getBalance().subtract(amount));
+        from.setBalance(from.getBalance().add(amount));
         to.setBalance(to.getBalance().add(amount));
         accounts.save(from);
         accounts.save(to);

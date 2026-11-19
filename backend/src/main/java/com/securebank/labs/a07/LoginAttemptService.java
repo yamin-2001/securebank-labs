@@ -3,7 +3,6 @@ package com.securebank.labs.a07;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import com.securebank.core.LabToggles;
 import org.springframework.stereotype.Service;
 
 /**
@@ -26,19 +25,13 @@ public class LoginAttemptService {
     /** How long an account stays locked out, in seconds. */
     public static final long LOCKOUT_SECONDS = 300;
 
-    private final LabToggles labs;
     private final Map<String, Attempt> attempts = new ConcurrentHashMap<>();
 
-    public LoginAttemptService(LabToggles labs) {
-        this.labs = labs;
+    public LoginAttemptService() {
     }
 
     /**
      * Is this account currently locked out?
-     *
-     * <p><strong>FIX:</strong> return the real state — the counter for this
-     * username, compared against {@link #MAX_ATTEMPTS} and the lockout
-     * window.
      */
     public boolean isBlocked(String username) {
         Attempt attempt = attempts.get(key(username));
@@ -51,9 +44,6 @@ public class LoginAttemptService {
 
     /**
      * Record a failed login attempt.
-     *
-     * <p><strong>FIX:</strong> increment the counter for this username and
-     * stamp the time.
      */
     public void recordFailure(String username) {
         attempts.compute(key(username), (k, existing) -> {
@@ -66,8 +56,6 @@ public class LoginAttemptService {
 
     /**
      * Record a successful login — clears the counter.
-     *
-     * <p><strong>FIX:</strong> remove the counter for this username.
      */
     public void recordSuccess(String username) {
         attempts.remove(key(username));
@@ -82,42 +70,15 @@ public class LoginAttemptService {
     /**
      * Apply the rate limit.
      *
-     * <p>This is the whole fix in one place: the login endpoint calls it
-     * before authenticating, and it throws when the account has spent its
-     * budget.
+     * <p>On the vulnerable build this only <em>checks</em> and never refuses.
+     * Counting happens on the failure path and clearing happens on the
+     * success path, so the counter reflects genuine failures — a user who
+     * logs in successfully has not failed, and their budget is restored.
      *
-     * <p>It only <em>checks</em>. Counting happens on the failure path and
-     * clearing happens on the success path, so the counter reflects genuine
-     * failures — a user who logs in successfully has not failed, and their
-     * budget is restored.
-     *
-     * <p><strong>FIX:</strong> make this method refuse the request once the
-     * budget is gone:
-     *
-     * <pre>{@code
-     * if (isBlocked(username)) {
-     *     throw new TooManyAttemptsException(username);
-     * }
-     * }</pre>
-     *
-     * <p>and call {@code recordFailure(username)} on a failed login and
-     * {@code recordSuccess(username)} on a successful one.
+     * <p><strong>LAB 17 (VULNERABLE):</strong> nothing is counted and nothing
+     * is refused.
      */
     public void applyRateLimit(String username) {
-        if (!labs.isEnabled("bruteforce")) {
-            return;
-        }
-
-        // LAB 17 (VULNERABLE): nothing is counted and nothing is refused.
-        //
-        // FIX: the two lines below are the fix.
-        //
-        //   if (isBlocked(username)) {
-        //       throw new TooManyAttemptsException(username);
-        //   }
-        //
-        // and call recordFailure(username) on a failed login and
-        // recordSuccess(username) on a successful one.
     }
 
     /** The current time in seconds — the lockout window is measured in these. */

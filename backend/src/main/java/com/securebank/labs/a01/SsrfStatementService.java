@@ -9,7 +9,6 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import com.securebank.core.LabToggles;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -24,24 +23,15 @@ import org.springframework.stereotype.Service;
  * <p>That lets a caller point the server at addresses the caller cannot reach
  * itself: cloud metadata endpoints ({@code 169.254.169.254}), loopback
  * services, or other containers on the internal network.
- *
- * <p><strong>FIX:</strong> validate the callback URL before fetching it.
- * The intended end state is {@link #isAllowedCallback(URI)}: parse the URL,
- * resolve it, and reject anything that is not on the allowlist — loopback,
- * link-local, and RFC-1918 private ranges are all refused. Better still,
- * do not accept a callback URL from the user at all: the statement should be
- * emailed to the address already on file.
  */
 @Service
 public class SsrfStatementService {
 
     private static final Logger log = LoggerFactory.getLogger(SsrfStatementService.class);
 
-    private final LabToggles labs;
     private final HttpClient http;
 
-    public SsrfStatementService(LabToggles labs) {
-        this.labs = labs;
+    public SsrfStatementService() {
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
                 .followRedirects(HttpClient.Redirect.NORMAL)
@@ -52,9 +42,6 @@ public class SsrfStatementService {
      * "Send" the statement and report what the callback returned.
      *
      * <p><strong>LAB 3 (VULNERABLE):</strong> the URL is fetched as-is.
-     *
-     * <p><strong>FIX:</strong> check {@link #isAllowedCallback(URI)} before
-     * fetching, and reject the request when it fails.
      */
     public Map<String, Object> sendStatement(Long accountId, String callbackUrl) {
         Map<String, Object> body = new LinkedHashMap<>();
@@ -69,23 +56,7 @@ public class SsrfStatementService {
             return body;
         }
 
-        if (labs.isEnabled("ssrf")) {
-            // LAB 3 (VULNERABLE): the server fetches any URL the caller names.
-            //
-            // FIX: guard this call with isAllowedCallback(uri) and reject when
-            // it returns false.
-            body.put("status", "sent");
-            body.put("callback_url", callbackUrl);
-            body.putAll(fetch(uri));
-            return body;
-        }
-
-        // ---- FIX (the intended final state) ----
-        if (!isAllowedCallback(uri)) {
-            body.put("status", "rejected");
-            body.put("error", "callback_url is not on the approved list");
-            return body;
-        }
+        // The server fetches any URL the caller names.
         body.put("status", "sent");
         body.put("callback_url", callbackUrl);
         body.putAll(fetch(uri));
@@ -93,11 +64,10 @@ public class SsrfStatementService {
     }
 
     /**
-     * ---- FIX (the intended final state) ----
+     * The allowlist check that is not applied.
      *
-     * <p>Allowlist check for outbound callback URLs. Rejects loopback,
-     * link-local (the cloud metadata address) and RFC-1918 private ranges,
-     * and only permits the approved hostnames.
+     * <p>It rejects loopback, link-local (the cloud metadata address) and
+     * RFC-1918 private ranges, and only permits the approved hostnames.
      */
     public boolean isAllowedCallback(URI uri) {
         if (uri == null || uri.getHost() == null) {

@@ -1,18 +1,15 @@
 package com.securebank;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Map;
 
-import com.securebank.core.LabToggles;
 import com.securebank.security.JwtKeys;
 import com.securebank.security.LabJwtService;
 import io.jsonwebtoken.Claims;
 import org.junit.jupiter.api.Test;
-import org.springframework.mock.env.MockEnvironment;
 
 /**
  * The JWT labs.
@@ -21,8 +18,7 @@ import org.springframework.mock.env.MockEnvironment;
  * to break by accident. These tests pin the behaviour each of them needs:
  *
  * <ul>
- *   <li>Lab 21: the vulnerable parser accepts an {@code alg:none} token; the
- *       fixed one does not.</li>
+ *   <li>Lab 21: the vulnerable parser accepts an {@code alg:none} token.</li>
  *   <li>Lab 25: a token that names no user parses successfully — the
  *       fail-open is in the filter, not the parser, so the two fixes stay
  *       independent.</li>
@@ -30,11 +26,8 @@ import org.springframework.mock.env.MockEnvironment;
  */
 class JwtLabTest {
 
-    private static LabJwtService service(boolean algNoneArmed) {
-        MockEnvironment env = new MockEnvironment()
-                .withProperty("lab.jwtalgnone", String.valueOf(algNoneArmed))
-                .withProperty("lab.failopen", "true");
-        return new LabJwtService(new LabToggles(env));
+    private static LabJwtService service() {
+        return new LabJwtService();
     }
 
     /** Build an unsigned {@code alg:none} token by hand. */
@@ -67,16 +60,9 @@ class JwtLabTest {
 
     @Test
     void lab21TheVulnerableParserAcceptsAnAlgNoneToken() {
-        LabJwtService jwt = service(true);
+        LabJwtService jwt = service();
         Claims claims = jwt.parse(algNoneToken(Map.of("user_id", 1L, "role", "admin")));
         assertThat(claims.get("role", String.class)).isEqualTo("admin");
-    }
-
-    @Test
-    void theFixedParserRejectsAnAlgNoneToken() {
-        LabJwtService jwt = service(false);
-        assertThatThrownBy(() -> jwt.parse(algNoneToken(Map.of("role", "admin"))))
-                .isInstanceOf(io.jsonwebtoken.JwtException.class);
     }
 
     @Test
@@ -84,7 +70,7 @@ class JwtLabTest {
         // This is the whole point of Lab 25: the token parses fine, so the
         // fix has to live in the filter — which means Lab 21's fix cannot
         // accidentally fix Lab 25, and vice versa.
-        LabJwtService jwt = service(false);
+        LabJwtService jwt = service();
         Claims claims = jwt.parse(jwt.issueServiceToken("batch-settlement"));
 
         assertThat(claims.get("service", String.class)).isEqualTo("batch-settlement");
@@ -96,16 +82,16 @@ class JwtLabTest {
     void aServiceTokenIsSignedWithTheRealSecret() {
         // The service token has to pass signature verification, so the
         // fail-open is reached with a token the server itself issued.
-        LabJwtService jwt = service(false);
+        LabJwtService jwt = service();
         Claims claims = jwt.parse(jwt.issueServiceToken("webhook"));
 
         assertThat(claims.get("role", String.class)).isEqualTo("customer");
-        assertThat(JwtKeys.secret(new LabToggles(new MockEnvironment()))).isNotEmpty();
+        assertThat(JwtKeys.secret()).isNotEmpty();
     }
 
     @Test
     void aUserTokenNamesItsUser() {
-        LabJwtService jwt = service(false);
+        LabJwtService jwt = service();
         Claims claims = jwt.parse(jwt.issue(2L, "alice", "customer"));
 
         assertThat(claims.get("user_id", Long.class)).isEqualTo(2L);

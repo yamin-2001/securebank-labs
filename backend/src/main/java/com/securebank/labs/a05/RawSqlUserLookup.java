@@ -19,8 +19,7 @@ import org.springframework.stereotype.Component;
  * independent of Lab 7 — fixing the hashing does not affect the injection,
  * and fixing the injection does not affect the hashing.
  *
- * <p><strong>FIX:</strong> use a parameterized statement. The intended end
- * state is the {@link #findByUsername} method below — it binds the username
+ * <p><strong>FIX:</strong> use a parameterized statement — bind the username
  * as a JDBC parameter so the payload is treated as data, never as SQL.
  */
 @Component
@@ -34,25 +33,10 @@ public class RawSqlUserLookup {
 
     /**
      * LAB 10 (VULNERABLE): the username is concatenated into the SQL string.
-     *
-     * <p>FIX: delete this method and use {@link #findByUsername(String)}.
      */
     public List<Map<String, Object>> findUserRaw(String username) {
         String sql = "SELECT id, username, password_hash, email, full_name, role, created_at"
                 + " FROM users WHERE username='" + username + "'";
         return jdbc.queryForList(sql);
-    }
-
-    /**
-     * ---- FIX (the intended final state) ----
-     *
-     * <p>Parameterized query: the username is bound as a JDBC parameter, so
-     * {@code admin' --} is matched as a literal username instead of
-     * terminating the string.
-     */
-    public List<Map<String, Object>> findByUsername(String username) {
-        String sql = "SELECT id, username, password_hash, email, full_name, role, created_at"
-                + " FROM users WHERE username = ?";
-        return jdbc.queryForList(sql, username);
     }
 }

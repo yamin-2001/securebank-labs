@@ -5,7 +5,6 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import com.securebank.core.LabToggles;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -30,12 +29,10 @@ import io.jsonwebtoken.security.Keys;
  */
 public class LabJwtService {
 
-    private final LabToggles labs;
     private final SecureJwtService secureParser;
 
-    public LabJwtService(LabToggles labs) {
-        this.labs = labs;
-        this.secureParser = new SecureJwtService(JwtKeys.secret(labs));
+    public LabJwtService() {
+        this.secureParser = new SecureJwtService(JwtKeys.secret());
     }
 
     /** Issue a token for the given principal. */
@@ -45,7 +42,7 @@ public class LabJwtService {
                 .claim("username", username)
                 .claim("role", role)
                 .signWith(Keys.hmacShaKeyFor(
-                                JwtKeys.secret(labs).getBytes(StandardCharsets.UTF_8)),
+                                JwtKeys.secret().getBytes(StandardCharsets.UTF_8)),
                         Jwts.SIG.HS256)
                 .compact();
     }
@@ -70,7 +67,7 @@ public class LabJwtService {
                 .claim("service", serviceName)
                 .claim("role", "customer")
                 .signWith(Keys.hmacShaKeyFor(
-                                JwtKeys.secret(labs).getBytes(StandardCharsets.UTF_8)),
+                                JwtKeys.secret().getBytes(StandardCharsets.UTF_8)),
                         Jwts.SIG.HS256)
                 .compact();
     }
@@ -78,29 +75,21 @@ public class LabJwtService {
     /**
      * Parse a token.
      *
-     * <p><strong>LAB 21 (VULNERABLE):</strong> when the {@code jwtalgnone}
-     * toggle is armed, the token is handed to
+     * <p><strong>LAB 21 (VULNERABLE):</strong> the token is handed to
      * {@link #parseWithoutAlgorithmCheck(String)}, which never verifies the
      * signature and never checks the {@code alg} header.
      *
-     * <p><strong>FIX:</strong> delete the vulnerable branch and always use
-     * {@code secureParser}. {@code parseSignedClaims()} rejects {@code alg:none}
-     * and every algorithm other than HS256.
+     * <p>A token that declares HS256 is judged by the signature check, so
+     * Lab 8 (the hardcoded secret) and Lab 21 (the missing alg check) stay
+     * independent: exploiting one does not accidentally exploit or break the
+     * other.
      */
     public Claims parse(String token) {
-        if (labs.isEnabled("jwtalgnone") && declaresAlgNone(token)) {
-            // LAB 21 (VULNERABLE): hand-rolled parse, no alg check, no signature check.
-            //
-            // The vulnerable path is only reachable for tokens that actually
-            // declare `alg: none`. A token that declares HS256 always goes
-            // through the signature check below, so Lab 8 (the hardcoded
-            // secret) and Lab 21 (the missing alg check) stay independent:
-            // fixing one does not accidentally fix or break the other.
-            //
-            // FIX: delete this branch — the secureParser below is the correct answer.
+        // LAB 21 (VULNERABLE): hand-rolled parse, no alg check, no signature check.
+        if (declaresAlgNone(token)) {
             return parseWithoutAlgorithmCheck(token);
         }
-        // FIXED (and the Lab 8 default): pin HS256 and verify the signature.
+        // Lab 8 default: pin HS256 and verify the signature.
         return secureParser.parse(token);
     }
 
