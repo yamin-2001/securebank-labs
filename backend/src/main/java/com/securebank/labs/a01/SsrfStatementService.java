@@ -9,7 +9,6 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import com.securebank.core.LabToggles;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -18,43 +17,39 @@ import org.springframework.stereotype.Service;
  * <strong>LAB 3 (A01 — Broken Access Control): SSRF.</strong>
  *
  * <p>The "email me my statement" feature posts the rendered statement to a
- * callback URL supplied by the caller. The server fetches whatever URL it is
- * given, with no validation at all, and returns the response body.
+ * callback URL supplied by the caller.
  *
- * <p>That lets a caller point the server at addresses the caller cannot reach
- * itself: cloud metadata endpoints ({@code 169.254.169.254}), loopback
- * services, or other containers on the internal network.
+ * <p><strong>FIXED:</strong> the callback URL is checked against an
+ * allowlist before the request goes out — see {@link #isAllowedCallback(URI)}.
+ * Loopback, link-local (the cloud metadata address) and RFC-1918 private
+ * ranges are all refused, and redirects are not followed so the allowlist
+ * cannot be stepped around with a 302.
  *
- * <p><strong>FIX:</strong> validate the callback URL before fetching it.
- * The intended end state is {@link #isAllowedCallback(URI)}: parse the URL,
- * resolve it, and reject anything that is not on the allowlist — loopback,
- * link-local, and RFC-1918 private ranges are all refused. Better still,
- * do not accept a callback URL from the user at all: the statement should be
- * emailed to the address already on file.
+ * <p>Better still, do not accept a callback URL from the user at all: the
+ * statement should be emailed to the address already on file.
  */
 @Service
 public class SsrfStatementService {
 
     private static final Logger log = LoggerFactory.getLogger(SsrfStatementService.class);
 
-    private final LabToggles labs;
     private final HttpClient http;
 
-    public SsrfStatementService(LabToggles labs) {
-        this.labs = labs;
+    public SsrfStatementService() {
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
-                .followRedirects(HttpClient.Redirect.NORMAL)
+                // Redirects are not followed. An allowlisted host that answers
+                // with a 302 to a private address would otherwise walk the
+                // request straight past the allowlist.
+                .followRedirects(HttpClient.Redirect.NEVER)
                 .build();
     }
 
     /**
      * "Send" the statement and report what the callback returned.
      *
-     * <p><strong>LAB 3 (VULNERABLE):</strong> the URL is fetched as-is.
-     *
-     * <p><strong>FIX:</strong> check {@link #isAllowedCallback(URI)} before
-     * fetching, and reject the request when it fails.
+     * <p><strong>LAB 3 (FIXED):</strong> the URL is checked against the
+     * allowlist before it is fetched.
      */
     public Map<String, Object> sendStatement(Long accountId, String callbackUrl) {
         Map<String, Object> body = new LinkedHashMap<>();
@@ -69,18 +64,8 @@ public class SsrfStatementService {
             return body;
         }
 
-        if (labs.isEnabled("ssrf")) {
-            // LAB 3 (VULNERABLE): the server fetches any URL the caller names.
-            //
-            // FIX: guard this call with isAllowedCallback(uri) and reject when
-            // it returns false.
-            body.put("status", "sent");
-            body.put("callback_url", callbackUrl);
-            body.putAll(fetch(uri));
-            return body;
-        }
-
-        // ---- FIX (the intended final state) ----
+        // FIXED: the callback URL is checked against the allowlist before the
+        // request goes out.
         if (!isAllowedCallback(uri)) {
             body.put("status", "rejected");
             body.put("error", "callback_url is not on the approved list");
