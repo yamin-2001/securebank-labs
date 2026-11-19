@@ -147,7 +147,9 @@ export default function AdminPage() {
  */
 export function OperationsConsole() {
   const [username, setUsername] = useState('admin')
-  const [password, setPassword] = useState('admin')
+  // LAB 5 (fixed): the admin's password has been rotated away from the
+  // shipped default, so `admin / admin` no longer signs in.
+  const [password, setPassword] = useState('S3cure-Admin-Passw0rd!')
   const [session, setSession] = useState<string | null>(null)
   const [users, setUsers] = useState<AdminUser[]>([])
   const [error, setError] = useState<string | null>(null)

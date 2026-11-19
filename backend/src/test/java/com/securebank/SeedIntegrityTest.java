@@ -23,7 +23,11 @@ import org.junit.jupiter.api.Test;
 class SeedIntegrityTest {
 
     private static final List<String[]> SEED_USERS = List.of(
-            new String[] { "1", "admin", "admin" },
+            // LAB 5 (A02 — Security Misconfiguration): the admin's password has
+            // been rotated away from the shipped default, so the operations
+            // console no longer accepts `admin / admin`. The other accounts
+            // keep their documented passwords.
+            new String[] { "1", "admin", "S3cure-Admin-Passw0rd!" },
             new String[] { "2", "alice", "password123" },
             new String[] { "3", "bob", "qwerty" },
             new String[] { "4", "carol", "letmein" },
