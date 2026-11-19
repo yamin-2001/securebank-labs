@@ -107,7 +107,9 @@ public class ReportController {
         }
         StandardEvaluationContext context = new StandardEvaluationContext();
         Map<String, Object> config = new LinkedHashMap<>();
-        config.put("secretKey", JwtKeys.HARDCODED_SECRET);
+        // The signing secret is what the template injection reads out of the
+        // application's internal configuration.
+        config.put("secretKey", JwtKeys.secret(labs));
         config.put("dbPath", "jdbc:postgresql://localhost:5432/securebank");
         config.put("internalHost", "postgres.internal.svc.cluster.local");
         context.setRootObject(Map.of("Config", config));

@@ -14,6 +14,25 @@ cd "$(dirname "$0")/.."
 
 LOG=/tmp/securebank-app.log
 PIDFILE=/tmp/securebank-app.pid
+SECRETFILE=/tmp/securebank-jwt-secret
+
+# The JWT signing secret (LAB 8).
+#
+# The secret is no longer in the source tree, so it has to come from
+# somewhere. A real deployment reads it from a secret manager; here it is
+# a file outside the repository, generated once and reused, so tokens
+# survive a restart. The file is never committed and never logged.
+jwt_secret() {
+    if [[ -n "${APP_JWT_SECRET:-}" ]]; then
+        printf '%s' "$APP_JWT_SECRET"
+        return 0
+    fi
+    if [[ ! -f "$SECRETFILE" ]]; then
+        python3 -c "import secrets; print(secrets.token_hex(32))" > "$SECRETFILE"
+        chmod 600 "$SECRETFILE"
+    fi
+    cat "$SECRETFILE"
+}
 
 stop_app() {
     if [[ -f "$PIDFILE" ]]; then
@@ -61,7 +80,7 @@ start_app() {
     # Truncate the log first: the failure check below greps it, and a stale
     # "BUILD FAILURE" from the previous run would abort this one instantly.
     : > "$LOG"
-    setsid ./mvnw -o spring-boot:run < /dev/null > "$LOG" 2>&1 &
+    APP_JWT_SECRET="$(jwt_secret)" setsid ./mvnw -o spring-boot:run < /dev/null > "$LOG" 2>&1 &
     echo $! > "$PIDFILE"
     popd > /dev/null
     for i in $(seq 1 120); do

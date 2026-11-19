@@ -16,12 +16,11 @@ public class SecureBankApplication {
     public static void main(String[] args) {
         ConfigurableApplicationContext context = SpringApplication.run(SecureBankApplication.class, args);
 
-        // LAB 8 (A04 — Cryptographic Failures): the signing secret is
-        // written to the log at startup. Anyone with log access — or a
-        // screenshot of a CI console — can mint an admin token.
-        //
-        // FIX: delete this call, and read the secret from the environment
-        // (see JwtKeys.secret).
+        // LAB 8 (A04 — Cryptographic Failures): FIXED. The signing secret
+        // used to be written to the log at startup, so anyone with log access
+        // — or a screenshot of a CI console — could mint an admin token. The
+        // secret now comes from the environment, and only its presence is
+        // reported, never its value.
         LabToggles labs = context.getBean(LabToggles.class);
         JwtKeys.logSecretAtStartup(labs, log);
     }
