@@ -3,7 +3,6 @@ package com.securebank.labs.a07;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import com.securebank.core.LabToggles;
 import com.securebank.domain.User;
 import com.securebank.domain.repo.UserRepository;
 import com.securebank.core.PasswordHasher;
@@ -25,20 +24,14 @@ import org.springframework.web.bind.annotation.RestController;
  * returning a bearer token, so that the session id can be observed before
  * and after login.
  *
- * <p>The session id is <em>not</em> rotated on successful authentication.
- * An attacker who can set a cookie in the victim's browser — through the
- * stored XSS in Lab 13, for instance — can then wait for the victim to log
- * in and reuse the same session id to ride their authenticated session.
+ * <p><strong>FIXED.</strong> The session id used to survive authentication
+ * unchanged. An attacker who could set a cookie in the victim's browser —
+ * through the stored XSS in Lab 13, for instance — could then wait for the
+ * victim to log in and reuse the same session id to ride their
+ * authenticated session.
  *
- * <p>Spring Security's default session-fixation protection would rotate the
- * id for us. It is switched off in {@code SecurityConfig.sessionChain()}
- * with {@code sessionFixation(fixation -> fixation.none())}, precisely so
- * that this lab is reachable.
- *
- * <p><strong>FIX:</strong> rotate the session id on successful login. Either
- * delete {@code sessionFixation(none())} so Spring Security's default
- * protection applies, or call {@code request.changeSessionId()} here. The
- * latter is shown in {@link #rotateSessionId(HttpServletRequest, HttpSession)}.
+ * <p>The id is now rotated at the moment of authentication, so any id the
+ * attacker planted beforehand is worthless afterwards.
  */
 @RestController
 @RequestMapping("/api")
@@ -46,22 +39,18 @@ public class SessionLoginController {
 
     private final UserRepository users;
     private final PasswordHasher passwords;
-    private final LabToggles labs;
 
-    public SessionLoginController(UserRepository users, PasswordHasher passwords, LabToggles labs) {
+    public SessionLoginController(UserRepository users, PasswordHasher passwords) {
         this.users = users;
         this.passwords = passwords;
-        this.labs = labs;
     }
 
     /**
      * Log in, establishing a session.
      *
-     * <p><strong>LAB 18 (VULNERABLE):</strong> the session id survives
-     * authentication unchanged.
-     *
-     * <p><strong>FIX:</strong> rotate the session id — see
-     * {@link #rotateSessionId(HttpServletRequest, HttpSession)}.
+     * <p><strong>LAB 18 (FIXED):</strong> the session id is rotated at the
+     * moment of authentication, so any id the attacker planted before the
+     * login is worthless afterwards.
      */
     @PostMapping("/auth/login-session")
     public ResponseEntity<Map<String, Object>> loginSession(@RequestBody Map<String, String> body,
@@ -86,19 +75,10 @@ public class SessionLoginController {
         session.setAttribute("username", user.getUsername());
         session.setAttribute("role", user.getRole());
 
-        if (labs.isEnabled("sessionfixation")) {
-            // LAB 18 (VULNERABLE): the session id is NOT rotated. The id the
-            // attacker planted before the victim logged in is now an
-            // authenticated session.
-            //
-            // FIX: delete this branch — the rotation below is the fix.
-        } else {
-            // ---- FIX (the intended final state) ----
-            // Rotate the id now that the session carries the authenticated
-            // attributes. The rotation carries them across to the new
-            // session, so the caller stays logged in.
-            session = rotateSessionId(request, session);
-        }
+        // LAB 18 (FIXED): rotate the id now that the session carries the
+        // authenticated attributes. The rotation carries them across to the
+        // new session, so the caller stays logged in.
+        session = rotateSessionId(request, session);
 
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("message", "Logged in");
