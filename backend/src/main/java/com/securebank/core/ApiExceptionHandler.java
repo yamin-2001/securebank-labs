@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.springframework.http.HttpStatus;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -51,4 +52,25 @@ public class ApiExceptionHandler {
         body.put("path", "");
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
     }
+    /**
+     * LAB 4 (A02): the debug endpoint's failure.
+     *
+     * <p><strong>FIXED:</strong> the failure is still a 500 — the exception
+     * genuinely is an internal error — but nothing about it is disclosed.
+     * The stack trace, the exception type and the message stay on the
+     * server; the client gets a generic body.
+     */
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalState(IllegalStateException ex) {
+        org.slf4j.LoggerFactory.getLogger(ApiExceptionHandler.class)
+                .error("Unhandled exception", ex);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("timestamp", java.time.Instant.now().toString());
+        body.put("status", 500);
+        body.put("error", "Internal Server Error");
+        body.put("path", "");
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
+    }
+
 }

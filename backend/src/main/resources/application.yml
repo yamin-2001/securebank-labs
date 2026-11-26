@@ -42,11 +42,11 @@ server:
     # These are deliberately weakened. Lab 23's fix is to set them to `never`
     # and add input validation; Lab 4's fix additionally stops the exception
     # message from embedding the JWT secret and the JDBC URL.
-    include-stacktrace: always
-    include-message: always
-    include-exception: always
-    include-binding-errors: always
-    include-path: always
+    include-stacktrace: never
+    include-message: never
+    include-exception: never
+    include-binding-errors: never
+    include-path: never
 
 management:
   endpoints:

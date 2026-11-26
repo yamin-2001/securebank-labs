@@ -89,7 +89,7 @@ public class SecurityConfig {
                         // FIX: change `.authenticated()` to `.hasRole("ADMIN")`.
                         // A regular customer can currently read every user in
                         // the system, including hashed passwords.
-                        .requestMatchers("/api/admin/**").authenticated()
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex
                         // Return a 401 JSON body rather than Spring's default

@@ -41,7 +41,10 @@ public class SsrfStatementService {
     /**
      * "Send" the statement and report what the callback returned.
      *
-     * <p><strong>LAB 3 (VULNERABLE):</strong> the URL is fetched as-is.
+     * <p><strong>LAB 3 (FIXED):</strong> the URL is checked against an
+     * allowlist before the server makes the call. A callback to a loopback,
+     * link-local or private address is rejected without any outbound
+     * request being made.
      */
     public Map<String, Object> sendStatement(Long accountId, String callbackUrl) {
         Map<String, Object> body = new LinkedHashMap<>();
@@ -50,6 +53,7 @@ public class SsrfStatementService {
         URI uri;
         try {
             uri = URI.create(callbackUrl == null ? "" : callbackUrl);
+
         } catch (IllegalArgumentException e) {
             body.put("status", "rejected");
             body.put("error", "callback_url is not a valid URL");
@@ -57,9 +61,17 @@ public class SsrfStatementService {
         }
 
         // The server fetches any URL the caller names.
+        if (!isAllowedCallback(uri)) {
+            body.put("status", "rejected");
+            body.put("error", "callback_url is not an allowed destination");
+            body.put("callback_url", callbackUrl);
+            return body;
+        }
+
         body.put("status", "sent");
         body.put("callback_url", callbackUrl);
         body.putAll(fetch(uri));
+
         return body;
     }
 

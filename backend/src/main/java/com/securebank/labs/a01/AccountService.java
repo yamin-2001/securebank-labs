@@ -1,6 +1,7 @@
 package com.securebank.labs.a01;
 
 import java.util.List;
+import java.util.Objects;
 
 import com.securebank.domain.Account;
 import com.securebank.domain.repo.AccountRepository;
@@ -24,17 +25,18 @@ public class AccountService {
     /**
      * Fetch a single account by id.
      *
-     * <p><strong>LAB 1 (VULNERABLE):</strong> the account is returned to
-     * whoever asks, with no check that the caller owns it. Any authenticated
-     * customer can read any other customer's balance and transaction history
-     * by changing the id in the URL.
+     * <p><strong>LAB 1 (FIXED):</strong> the account is returned only if the
+     * caller owns it. Any authenticated customer used to be able to read any
+     * other customer's balance and transaction history by changing the id in
+     * the URL; the ownership check below refuses that.
      */
     @Transactional(readOnly = true)
     public Account getAccount(Long id, Long callerUserId) {
         Account account = accounts.findById(id)
                 .orElseThrow(() -> new AccountNotFoundException("No account with id " + id));
-
-        // No ownership check — this returns any account by id.
+        if (!Objects.equals(account.getOwnerId(), callerUserId)) {
+            throw new AccountForbiddenException("You don't own account with id " + id);
+        }
         return account;
     }
 
