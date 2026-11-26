@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+#
+# pre-push: refuse to push a state that breaks the branch contract.
+#
+# The two branches have opposite contracts:
+#
+#   main  — every lab must be VULNERABLE. It is the build learners exploit.
+#   fixed — every lab must be FIXED, and no vulnerable code path may remain.
+#
+# Pushing either one in the wrong state is easy to do by accident: a
+# half-finished fix left in the working tree, a stray "fix" commit on main,
+# or a toggle re-introduced on fixed. This hook checks the cheap, local
+# invariants before anything leaves the machine, so a mistake costs a
+# rebase rather than a public branch that needs undoing.
+#
+# The behavioural check (`make verify` / `make verify-fixed`) needs the app
+# running and takes minutes, so it is not run here. This hook checks the
+# static invariants that can be checked instantly.
+#
+# Enable it with:
+#     git config core.hooksPath .githooks
+#
+# Override a refusal with --no-verify.
+
+set -uo pipefail
+
+REMOTE="$1"
+URL="$2"
+
+ZERO=0000000000000000000000000000000000000000
+
+# Only guard pushes to this repository.
+case "$URL" in
+    *github.com:yamin-2001/securebank-labs.git|*github.com/yamin-2001/securebank-labs.git) ;;
+    *) exit 0 ;;
+esac
+
+# Collect the refs being pushed: "<local ref> <local sha> <remote ref> <remote sha>"
+pushed_refs=()
+while read -r local_ref local_sha remote_ref remote_sha; do
+    [ "$local_sha" = "$ZERO" ] && continue   # branch deletion
+    pushed_refs+=("$local_ref=$local_sha")
+done
+
+if [ ${#pushed_refs[@]} -eq 0 ]; then
+    exit 0
+fi
+
+fail() {
+    echo "" >&2
+    echo "pre-push: REFUSED — $1" >&2
+    echo "pre-push: $2" >&2
+    echo "pre-push: fix this before pushing. (Use --no-verify to override.)" >&2
+    echo "" >&2
+    exit 1
+}
+
+# Does the tree at <sha> contain <pattern> under <path>?
+tree_has() {
+    git grep -qE "$1" "$2" -- backend/src frontend/src 2>/dev/null
+}
+
+for entry in "${pushed_refs[@]}"; do
+    ref="${entry%%=*}"
+    sha="${entry##*=}"
+
+    branch="${ref#refs/heads/}"
+
+    case "$branch" in
+        main)
+            # The vulnerable build must contain no toggle mechanism, and no
+            # lab may have been "fixed" in the committed code.
+            if tree_has 'LabToggles|isEnabled\("' "$sha"; then
+                fail "'$branch' carries a lab toggle" \
+                     "The vulnerable build has no switches. Remove the LabToggles usage before pushing to main."
+            fi
+            if git show "$sha":backend/src/main/resources/application.yml 2>/dev/null | grep -qE '^lab:'; then
+                fail "'$branch' has a lab: block in application.yml" \
+                     "The vulnerable build has no lab toggles. Remove that block before pushing to main."
+            fi
+            # A fixed path that should not exist on main.
+            for helper in renderFixed updateFixed generateFixed dateFilterFixed importAccountSafe storeUploadSafely; do
+                if git grep -q "$helper" "$sha" -- backend/src 2>/dev/null; then
+                    fail "'$branch' contains the fixed helper '$helper'" \
+                         "main ships the vulnerable code only — the fixed helper gives the answer away."
+                fi
+            done
+            ;;
+
+        fixed)
+            # The fixed build must have no toggle mechanism, and must not
+            # contain a vulnerable path guarded by one.
+            if tree_has 'LabToggles|isEnabled\("' "$sha"; then
+                fail "'$branch' still carries a lab toggle" \
+                     "The fixed build must have no switches — nothing vulnerable may remain. Remove the toggle usage."
+            fi
+            if git show "$sha":backend/src/main/resources/application.yml 2>/dev/null | grep -qE '^lab:'; then
+                fail "'$branch' still has a lab: block in application.yml" \
+                     "The fixed build must have no lab toggles. Remove that block."
+            fi
+            # A vulnerable code path still present in the fixed build.
+            for pattern in 'VULNERABLE' 'renderVulnerable' 'parseWithoutAlgorithmCheck'; do
+                if git grep -q "$pattern" "$sha" -- backend/src 2>/dev/null; then
+                    fail "'$branch' still contains '$pattern'" \
+                         "The fixed build must contain no vulnerable code path."
+                fi
+            done
+            ;;
+
+        *)
+            # Any other branch (wip/, feature/, …) is unconstrained.
+            ;;
+    esac
+done
+
+exit 0
