@@ -345,6 +345,19 @@ it on the way in — the `<resource>` block in `backend/pom.xml` maps
 `static/git-config-fixture` to `static/.git` — so the served path is
 `/.git/config` exactly as the lab intends.
 
+**A pre-push hook guards the branch contract.** `main` ships the vulnerable
+build and `fixed` ships the patched one, and it is easy to push either in
+the wrong state by accident. `.githooks/pre-push` checks the cheap static
+invariants locally — no toggle mechanism on either branch, no `lab:` block
+in `application.yml`, no fixed helper leaking onto `main`, and no vulnerable
+code path surviving on `fixed`. Enable it once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+It refuses the push and says what is wrong. `--no-verify` overrides it.
+
 ---
 
 ## Troubleshooting
