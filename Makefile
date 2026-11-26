@@ -9,7 +9,7 @@
 
 .DEFAULT_GOAL := help
 .PHONY: help up down reset run stop build verify verify-fixed verify-all \
-        matrix solutions ui ui-install test clean
+        matrix solutions labs-json check-labs-json ui ui-install test clean
 
 APP_PORT    ?= 8080
 UI_PORT     ?= 5173
@@ -72,6 +72,12 @@ matrix: ## Prove each fix is independent: apply one at a time, expect one flip
 
 solutions: ## Regenerate solutions/SOLUTIONS.md from the tested fix table
 	python3 scripts/gen_solutions.py
+
+labs-json: ## Regenerate frontend/src/labs.json from the manifest
+	python3 scripts/gen_labs_json.py
+
+check-labs-json: ## Fail if frontend/src/labs.json has drifted from the manifest
+	python3 scripts/gen_labs_json.py --check
 
 # --- housekeeping ---------------------------------------------------------
 
