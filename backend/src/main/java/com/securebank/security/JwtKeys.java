@@ -4,8 +4,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Base64;
 
-import com.securebank.core.LabToggles;
-
 /**
  * The JWT signing secret.
  *
@@ -46,7 +44,7 @@ public final class JwtKeys {
      * <p>Read from the environment, then from the system properties, then
      * from a random per-process fallback. Never hardcoded, never logged.
      */
-    public static String secret(LabToggles labs) {
+    public static String secret() {
         String fromEnv = System.getenv(SECRET_ENV_VAR);
         if (fromEnv != null && !fromEnv.isBlank()) {
             return fromEnv;
@@ -88,7 +86,7 @@ public final class JwtKeys {
      * <p>The call is kept so the startup wiring does not change, but it now
      * reports only that a secret is configured — never its value.
      */
-    public static void logSecretAtStartup(LabToggles labs, org.slf4j.Logger log) {
+    public static void logSecretAtStartup(org.slf4j.Logger log) {
         if (System.getenv(SECRET_ENV_VAR) != null || System.getProperty(SECRET_PROPERTY) != null) {
             log.info("JWT signing secret loaded from the environment");
         } else {

@@ -78,7 +78,7 @@
       "title": "Hardcoded JWT secret — forge an admin token",
       "severity": "MEDIUM",
       "endpoints": ["any authenticated endpoint"],
-      "fix_location": "backend/src/main/java/com/securebank/security/JwtKeys.java -> secret(LabToggles)"
+      "fix_location": "backend/src/main/java/com/securebank/security/JwtKeys.java -> secret()"
     },
     {
       "id": 9,

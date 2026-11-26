@@ -81,7 +81,12 @@ public class PasswordHasher {
 
     // ---- primitives ----------------------------------------------------
 
-    /** LAB 7 (VULNERABLE): unsalted MD5. */
+    /**
+     * Legacy unsalted MD5 — the verification path for hashes that predate
+     * the PBKDF2 migration, and nothing else. Nothing writes a hash with
+     * this; {@link #hash(String)} is the only method that produces a stored
+     * hash, and it produces PBKDF2.
+     */
     public String md5Hex(String input) {
         try {
             MessageDigest digest = MessageDigest.getInstance("MD5");

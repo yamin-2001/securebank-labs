@@ -2,7 +2,6 @@ package com.securebank.security;
 
 import java.nio.charset.StandardCharsets;
 
-import com.securebank.core.LabToggles;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -14,7 +13,7 @@ import io.jsonwebtoken.security.Keys;
  * <ul>
  *   <li><strong>Lab 8 (FIXED)</strong> — the signing secret used to be a
  *       hardcoded literal in the source tree; it now comes from the
- *       environment. See {@link JwtKeys#secret(LabToggles)}.</li>
+ *       environment. See {@link JwtKeys#secret()}.</li>
  *   <li><strong>Lab 21 (FIXED)</strong> — {@link #parse(String)} used to be
  *       able to hand the token to a hand-rolled parser that never inspected
  *       the {@code alg} header and never verified the signature.</li>
@@ -28,12 +27,10 @@ import io.jsonwebtoken.security.Keys;
  */
 public class LabJwtService {
 
-    private final LabToggles labs;
     private final SecureJwtService secureParser;
 
-    public LabJwtService(LabToggles labs) {
-        this.labs = labs;
-        this.secureParser = new SecureJwtService(JwtKeys.secret(labs));
+    public LabJwtService() {
+        this.secureParser = new SecureJwtService(JwtKeys.secret());
     }
 
     /** Issue a token for the given principal. */
@@ -43,7 +40,7 @@ public class LabJwtService {
                 .claim("username", username)
                 .claim("role", role)
                 .signWith(Keys.hmacShaKeyFor(
-                                JwtKeys.secret(labs).getBytes(StandardCharsets.UTF_8)),
+                                JwtKeys.secret().getBytes(StandardCharsets.UTF_8)),
                         Jwts.SIG.HS256)
                 .compact();
     }
@@ -68,7 +65,7 @@ public class LabJwtService {
                 .claim("service", serviceName)
                 .claim("role", "customer")
                 .signWith(Keys.hmacShaKeyFor(
-                                JwtKeys.secret(labs).getBytes(StandardCharsets.UTF_8)),
+                                JwtKeys.secret().getBytes(StandardCharsets.UTF_8)),
                         Jwts.SIG.HS256)
                 .compact();
     }
