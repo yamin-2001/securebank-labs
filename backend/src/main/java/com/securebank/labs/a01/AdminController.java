@@ -14,20 +14,19 @@ import org.springframework.web.bind.annotation.RestController;
  * Administrative endpoints.
  *
  * <p>Home of <strong>LAB 2 (A01 — Broken Access Control): missing role
- * check</strong>. The endpoint itself performs no authorization; the whole
- * of the protection is supposed to live in the Spring Security matcher
- * configuration. See
- * {@code SecurityConfig#apiChain}:
+ * check</strong> (FIXED). The endpoint itself performs no authorization; the
+ * whole of the protection lives in the Spring Security matcher
+ * configuration. See {@code SecurityConfig#apiChain}:
  *
  * <pre>{@code
- * // LAB 2 (VULNERABLE): authenticated, but NO role check.
- * .requestMatchers("/api/admin/**").authenticated()
+ * .requestMatchers("/api/admin/**").hasRole("ADMIN")
  * }</pre>
  *
- * <p><strong>FIX:</strong> change that matcher to
- * {@code .hasRole("ADMIN")}. Nothing in this file needs to change — that is
- * the point: the vulnerability is a <em>missing</em> check, so the fix is the
- * addition of one line elsewhere.
+ * <p><strong>FIXED:</strong> the matcher requires the ADMIN role, so a
+ * customer token can no longer reach these endpoints. Nothing in this file
+ * needed to change — that was the point: the vulnerability was a
+ * <em>missing</em> check, so the fix was the addition of one line
+ * elsewhere.
  */
 @RestController
 @RequestMapping("/api/admin")

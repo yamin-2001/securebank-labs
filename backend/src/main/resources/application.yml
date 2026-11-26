@@ -1,7 +1,7 @@
 # SecureBank Labs — application configuration
 #
-# WARNING: this application is INTENTIONALLY VULNERABLE. It exists to be
-# exploited and then fixed. Do not deploy it anywhere reachable.
+# This is the FIXED build: every lab has been patched. The vulnerable build
+# lives on the `main` branch.
 
 spring:
   application:
