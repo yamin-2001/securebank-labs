@@ -127,7 +127,7 @@ securebank-labs/
 ├── frontend/        React 18 + Tailwind + Vite    → http://localhost:5173
 │
 ├── verify/          the verification harness       → python3 verify/run.py
-├── scripts/         app.sh, isolation_matrix.py, gen_solutions.py, real_fixes.py, why.py
+├── scripts/         app.sh, isolation_matrix.py, gen_solutions.py, gen_labs_json.py, real_fixes.py, why.py
 └── solutions/       the full fix reference          → solutions/SOLUTIONS.md
 ```
 
@@ -313,7 +313,7 @@ doing.*
 
 ---
 
-### Lab 1 — IDOR: read another customer's account `Low`
+### Lab 1 — IDOR: read another customer's account `High`
 
 **What it is.** IDOR means *Insecure Direct Object Reference*. When the app
 keeps an account in a URL like `/api/accounts/2`, the number `2` is an
@@ -361,7 +361,7 @@ may not do that" — look for `AccountService.AccountForbiddenException`, which
 
 ---
 
-### Lab 2 — Privilege escalation: customer → admin `Medium`
+### Lab 2 — Privilege escalation: customer → admin `Critical`
 
 **What it is.** The app has two kinds of user: **customers** and **admins**.
 Some endpoints are for admins only — the admin API that lists every user in
@@ -980,10 +980,11 @@ Ask yourself:
   controls?
 - SpEL has a way to say "use this value, do not evaluate it". Look for
   `setVariable` and the `#` prefix — that is the shape of the answer.
-- The class already contains the fixed version as `renderFixed(String)`.
-  Read it, understand *why* it is safe, and then make the vulnerable path
-  behave the same way. (The intended fix deletes the vulnerable branch
-  rather than adding a second one.)
+- The vulnerable path is `renderVulnerable(String)`. Replace its body with
+  the constant-template version — the expression becomes a literal like
+  `"#remark"`, and the caller's text is bound with
+  `ctx.setVariable("remark", remark)`. (The intended fix deletes the
+  vulnerable branch rather than adding a second one.)
 
 ---
 
@@ -1045,7 +1046,8 @@ private keys, install a backdoor.
 - Consider what the report actually needs to contain. It needs the
   *account id*. How do you get a value into a fixed template without
   evaluating the caller's text?
-- The class contains `generateFixed(Map)` — read it.
+- The vulnerable path is `renderTemplateVulnerable(String)`. Replace its
+  body with a constant template and bind the account id as a variable.
 
 **For the command:**
 
@@ -1058,7 +1060,9 @@ private keys, install a backdoor.
   passing it to a shell?
 - Two layers of defence: parse and validate the dates **before** you use
   them, *and* stop using a shell.
-- The class contains `dateFilterFixed(Map)` — read it.
+- The vulnerable path is `runShell(String)` — it hands a pre-built command
+  *line* to a shell. The fixed version passes a list of arguments instead,
+  with no shell involved.
 
 ---
 
@@ -1266,8 +1270,9 @@ token.
 endpoint whose security depends on every client being honest — including
 the ones you did not write.
 
-**Hint.** The class already has the safe version: `updateFixed(Map)`. Read
-it and notice what it does.
+**Hint.** The vulnerable path is `applyAllFields(User, Map)`. Read it and
+notice what it does: it walks the client's body and writes *every* key it
+finds onto the entity.
 
 The idea in one sentence: **the server decides which fields may be written,
 not the client.**
@@ -1537,7 +1542,7 @@ check how it was signed.*
 
 ---
 
-### Lab 20 — Unsafe deserialization → remote code execution `High`
+### Lab 20 — Unsafe deserialization → remote code execution `Critical`
 
 **What it is.** Java's native serialisation format is powerful: the byte
 stream literally **names the classes to construct**, and the data carries
@@ -1601,8 +1606,9 @@ than it looks.
    actually for? (Importing an account.) What data-only format describes an
    account? (JSON or CSV.) If the bytes are parsed as JSON, they can describe
    an account but they **cannot name a class** — and nothing in the file can
-   become code. The class already contains `importAccountSafe(MultipartFile)`
-   doing exactly this.
+   become code. The vulnerable path is `importAccount(MultipartFile)`; replace
+   its body so it parses the bytes as JSON instead of handing them to
+   `ObjectInputStream`.
 2. **If you must deserialize, constrain the stream.** Java has
    `ObjectInputFilter`, which lets you allowlist the classes the stream is
    permitted to construct. Anything not on the list is rejected *before* it
@@ -1613,7 +1619,7 @@ Ask yourself which of the two you would choose in production, and why
 
 ---
 
-### Lab 21 — JWT `alg:none` — forge an admin token with no key at all `Medium`
+### Lab 21 — JWT `alg:none` — forge an admin token with no key at all `Critical`
 
 **What it is.** Recall that a JWT is `header.payload.signature`. The
 `header` says which algorithm was used — `HS256` (a symmetric HMAC) or
@@ -1739,8 +1745,8 @@ file itself served back as `text/html` — the `<script>` runs.
 **Why it matters.** An upload endpoint that serves your bytes back from
 your own origin is a stored-XSS machine with a public filename.
 
-**Hint.** Three questions, and the class's `storeUploadSafely` answers
-all three:
+**Hint.** Three questions, and the vulnerable path `kycUpload(MultipartFile)`
+has an answer to all three:
 
 1. **Who names the file?** The client should not. What should the stored
    name be — and where should the *original* name live instead?
@@ -1748,14 +1754,16 @@ all three:
    What directory should that be, and what is the current one? (The
    vulnerable branch writes into `UPLOAD_DIR`, which is the relative path
    `uploads` — resolved against the backend's working directory, i.e.
-   `backend/uploads/`. The safe version writes to `var/kyc/`.)
+   `backend/uploads/`. The fixed version writes to `var/kyc/`.)
 3. **What extension does it get?** If the name is generated by the server,
    the extension is generated too. Should an uploaded file keep the
    client's extension at all?
 
 And one more: **what is the content type of the response?** Even a
 correctly-named file can be dangerous if it is served as `text/html`. How
-does the server decide what content type to send?
+does the server decide what content type to send? (Look at
+`contentTypeFor(String)` — it maps the extension to a MIME type, and it is
+what decides how the browser treats the bytes.)
 
 > Do not be misled by the `location` field the vulnerable branch returns
 > (`/uploads/<name>`). In this build that URL is not served — the
@@ -1874,7 +1882,7 @@ deliberate, so the two A10 labs can be fixed independently.
 
 ---
 
-### Lab 25 — Fail-open authentication: a token that names nobody becomes admin `High`
+### Lab 25 — Fail-open authentication: a token that names nobody becomes admin `Critical`
 
 **What it is.** This is the most important lab in the set, and the one
 that has caused the most real breaches.
@@ -2068,4 +2076,7 @@ another — the matrix proves it, but it is worth knowing where to look:
   category, severity, endpoints, and the file and
   method to fix.
 - The **Labs panel** in the running app (top right of the navbar) — the same
-  information, in the browser.
+  information, in the browser. Its metadata comes from
+  `frontend/src/labs.json`, which is generated from `verify/manifest.json`
+  by `scripts/gen_labs_json.py` — the same source `--show` reads, so the
+  panel cannot drift from the guide.

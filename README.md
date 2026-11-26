@@ -167,7 +167,7 @@ says what happened.
 | 13 | A05 | Stored XSS | `POST /api/transfers/send` |
 | 14 | A06 | Negative transfer — the amount is applied without validation | `POST /api/transfers/send` |
 | 15 | A06 | Mass assignment | `PATCH /api/profile` |
-| 16 | A07 | Account enumeration | `POST /api/auth/login` |
+| 16 | A06 | Account enumeration | `POST /api/auth/login` |
 | 17 | A07 | Brute force — no lockout | `POST /api/auth/login` |
 | 18 | A07 | Session fixation | `POST /api/auth/login-session` |
 | 19 | A07 | Predictable reset token | `POST /api/auth/reset-request` |
@@ -191,6 +191,16 @@ drift apart.
 
 ```bash
 make solutions
+```
+
+The lab **metadata** — title, OWASP category, severity — has one source of
+truth too: `verify/manifest.json`, which is what `verify/run.py --show`
+prints. The Labs panel in the running app reads its copy of that metadata
+from `frontend/src/labs.json`, which is generated from the same manifest:
+
+```bash
+make labs-json        # regenerate frontend/src/labs.json
+make check-labs-json  # fail if it has drifted
 ```
 
 Two labs need more than a one-line change, and the reference says so:
@@ -268,6 +278,7 @@ securebank-labs/
 │   ├── app.sh                       start/stop/restart the backend
 │   ├── isolation_matrix.py          the fix-isolation test
 │   ├── gen_solutions.py             generates solutions/SOLUTIONS.md
+│   ├── gen_labs_json.py             generates frontend/src/labs.json
 │   ├── real_fixes.py                the production-shaped fix, per lab
 │   └── why.py                       the explanation, per lab
 │
@@ -283,6 +294,14 @@ A few decisions that are not obvious from the code:
 **There are no toggles.** The vulnerable build is one code path per
 method, with no switch beside it. `main` is that build; `fixed` is the
 same app with every lab repaired, one small commit per lab.
+
+**The lab metadata has one source of truth.** `verify/manifest.json` holds
+each lab's title, OWASP category and severity — it is what `verify/run.py
+--show` prints and what `solutions/SOLUTIONS.md` is generated from. The
+Labs panel's copy lives in `frontend/src/labs.json` and is generated from
+that same manifest by `scripts/gen_labs_json.py`. Run `make labs-json`
+after changing the manifest, and `make check-labs-json` to prove the two
+have not drifted.
 
 **Spring Security is on the classpath, deliberately weakened.** Its
 defaults would neutralise several labs — the `NimbusJwtDecoder` rejects
